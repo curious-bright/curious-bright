@@ -8,6 +8,7 @@ import { CuriousLoading, CuriousError } from '../components/CuriousStates';
 import { motion } from 'framer-motion';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { ReactReader } from 'react-reader';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -32,6 +33,7 @@ export default function Read() {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pdfError, setPdfError] = useState(false);
+  const [locationEpub, setLocationEpub] = useState<string | number>(0);
 
   // Demo Co-author Gliding Cursors & Live Typing Ripple
   const [collaborators, setCollaborators] = useState([
@@ -152,7 +154,8 @@ export default function Read() {
     );
   }
 
-  const pdfUrl = docItem.fileUrl;
+  const fileUrl = docItem.fileUrl;
+  const isEpub = fileUrl?.toLowerCase().includes('.epub') || fileUrl?.toLowerCase().includes('epub+zip');
 
   return (
     <div className="flex flex-col items-center">
@@ -173,8 +176,8 @@ export default function Read() {
           </div>
         </div>
 
-        {pdfUrl && (
-          <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8125rem' }}>
+        {fileUrl && (
+          <a href={fileUrl} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8125rem' }}>
             <i className="bx bx-download" style={{ fontSize: '1.1rem' }}></i>
             <span>Save Local Copy</span>
           </a>
@@ -238,18 +241,27 @@ export default function Read() {
         ))}
 
         <CommentCornerCard style={{ padding: '1.5rem', minHeight: '520px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {pdfError ? (
+          {isEpub ? (
+            <div style={{ position: 'relative', height: '600px', width: '100%', maxWidth: '760px' }}>
+              <ReactReader
+                url={fileUrl}
+                title={docItem.title}
+                location={locationEpub}
+                locationChanged={(epubLocation: string) => setLocationEpub(epubLocation)}
+              />
+            </div>
+          ) : pdfError ? (
             <div className="text-center p-8">
               <p className="font-semibold mb-2">Unable to render PDF preview directly in browser.</p>
               <p className="text-muted text-sm mb-4">You can download the full PDF to read offline.</p>
-              <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+              <a href={fileUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
                 <i className="bx bx-download" style={{ fontSize: '1.1rem' }}></i>
                 <span>Download PDF Document</span>
               </a>
             </div>
           ) : (
             <Document
-              file={pdfUrl}
+              file={fileUrl}
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={(err) => {
                 console.error('PDF load error:', err);
@@ -262,7 +274,7 @@ export default function Read() {
           )}
 
           {/* Page Controls with Boxicons */}
-          {numPages && numPages > 0 && !pdfError && (
+          {!isEpub && numPages && numPages > 0 && !pdfError && (
             <div className="flex items-center gap-4 mt-6 pt-4" style={{ borderTop: '1.5px solid var(--color-line)', width: '100%', justifyContent: 'center' }}>
               <button 
                 className="btn btn-secondary" 

@@ -114,6 +114,63 @@ export async function runBookIngestion() {
     console.error('[Ingestion Job] Gutenberg API fetch error:', err);
   }
 
+  // 2. Query Open Library API
+  try {
+    const openLibraryUrl = 'https://openlibrary.org/subjects/science.json?limit=5';
+    const olResponse = await fetch(openLibraryUrl);
+    if (olResponse.ok) {
+      const olData: any = await olResponse.json();
+      const works = olData.works || [];
+
+      for (const work of works) {
+        const title = work.title || 'Untitled';
+        const authorName = work.authors?.[0]?.name || 'Unknown Author';
+        const sourceId = work.key.replace('/works/', ''); // e.g. OL12345W
+        const coverUrl = work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-L.jpg` : null;
+        
+        const iaId = Array.isArray(work.ia) ? work.ia[0] : work.ia;
+        // Use Archive.org link if available, otherwise just use Open Library page as a fallback
+        const originUrl = iaId ? `https://archive.org/download/${iaId}/${iaId}.pdf` : `https://openlibrary.org${work.key}`;
+
+        const existing = await prisma.book.findUnique({
+          where: { source_sourceId: { source: 'OPEN_LIBRARY', sourceId } },
+        });
+
+        if (existing) {
+          await prisma.book.update({
+            where: { id: existing.id },
+            data: {
+              title,
+              author: authorName,
+              coverUrl,
+              originUrl,
+            },
+          });
+          updatedCount++;
+        } else {
+          await prisma.book.create({
+            data: {
+              source: 'OPEN_LIBRARY',
+              sourceId,
+              title,
+              author: authorName,
+              description: 'Text from Open Library.',
+              coverUrl,
+              license: 'Public Domain',
+              academicLevel: 'COLLEGE',
+              subjectTags: ['Science', 'Open Library'],
+              originUrl,
+              cacheStatus: 'NOT_CACHED',
+            },
+          });
+          addedCount++;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Ingestion Job] Open Library API fetch error:', err);
+  }
+
   // Fallback / Seed classic open source works if network query yields small set
   const defaultCatalog = [
     {
