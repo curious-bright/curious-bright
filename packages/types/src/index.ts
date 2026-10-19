@@ -1,4 +1,4 @@
-import { RegisterInput, LoginInput } from '@curious-bright/validation';
+import { RegisterInput, LoginInput, SubmissionInput } from '@curious-bright/validation';
 
 export type { RegisterInput, LoginInput, SubmissionInput };
 export * from '@curious-bright/validation';

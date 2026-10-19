@@ -26,7 +26,12 @@ RUN pnpm install --frozen-lockfile
 ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/curious_bright"
 RUN pnpm --filter @curious-bright/database generate
 
-# 5. Build backend and services
+# 5. Build all shared packages, then apps
+RUN pnpm --filter @curious-bright/database build
+RUN pnpm --filter @curious-bright/validation build
+RUN pnpm --filter @curious-bright/types build
+RUN pnpm --filter @curious-bright/realtime-contracts build
+RUN pnpm --filter @curious-bright/whiteboard-engine build
 RUN pnpm --filter backend build
 RUN pnpm --filter realtime-gateway build
 RUN pnpm --filter signaling-service build
