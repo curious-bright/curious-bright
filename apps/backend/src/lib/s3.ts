@@ -4,7 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const isProd = process.env.NODE_ENV === 'production';
 
 const s3Config = {
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION || 'auto',
   endpoint: process.env.S3_ENDPOINT || process.env.AWS_ENDPOINT || (isProd ? '' : 'http://localhost:9000'),
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || 'minioadmin',
