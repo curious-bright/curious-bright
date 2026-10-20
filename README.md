@@ -82,6 +82,7 @@ ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=<strong-passwo
 ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=<strong-password> \
   venv/bin/python manage.py ensure_admin
 ```
+(Alternatively skip the `ADMIN_*` vars and run `venv/bin/python manage.py createsuperuser`.)
 With no `DATABASE_URL` the backend uses local SQLite. Full environment variable
 list, API endpoints, error contract and edge-case notes: **[apps/backend/README.md](apps/backend/README.md)**
 (`.env.example` alongside it).
@@ -107,11 +108,20 @@ if needed, then starts gunicorn on `$PORT`.
 2. **Add a PostgreSQL addon** and link it to the service. Northflank injects its
    connection string; expose it to Django as `DATABASE_URL`.
 3. **Set secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
-   `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, and the first-deploy
-   `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+   `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_USERNAME` /
+   `ADMIN_EMAIL` / `ADMIN_PASSWORD` are **optional** (bootstrapping only) —
+   without them `start.sh` skips `ensure_admin` and you create the superuser
+   yourself from the server shell: `python manage.py createsuperuser`.
 4. **Deploy.** The logs should show each migration applying, then
-   `ensure_admin`, then gunicorn binding to the port. Health-check the API with
+   `collectstatic`, then gunicorn binding to the port. Health-check with
+   `GET /healthz/` (returns `200 {"status": "ok", "database": true}`) and
    `GET /api/posts/`.
+
+The admin at `https://api.curiousbright.com.ng/admin/` opens with a
+**username + password login** and an analytics overview: member/post/report/
+application/room/document/badge counts, plus recent activity panels (posts
+awaiting review, open reports, pending moderator applications, newest members)
+and the standard Recent actions sidebar.
 
 > [!IMPORTANT]
 > If a deploy ever fails with `relation "accounts_user" does not exist` while

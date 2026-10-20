@@ -1,0 +1,111 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
+<style>
+  .cb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0 0 22px; }
+  .cb-card { background: #1f2933; color: #fff; border-radius: 8px; padding: 14px 16px; }
+  .cb-card .cb-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; opacity: .72; }
+  .cb-card .cb-value { font-size: 27px; font-weight: 700; line-height: 1.15; margin-top: 4px; }
+  .cb-card .cb-value a { color: #8ec7ff; }
+  .cb-card .cb-note { display: block; font-size: 12px; opacity: .7; margin-top: 6px; }
+  .cb-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 22px; }
+  .cb-panel { background: #fff; border: 1px solid var(--hairline-color, #e5e7eb); border-radius: 8px; padding: 12px 14px; }
+  .cb-panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #4b5563; margin: 0 0 8px; }
+  .cb-panel ul { list-style: none; margin: 0; padding: 0; }
+  .cb-panel li { padding: 7px 0; border-bottom: 1px solid #f1f1f1; font-size: 13px; }
+  .cb-panel li:last-child { border-bottom: 0; }
+  .cb-panel .cb-meta { display: block; color: #6b7280; font-size: 12px; margin-top: 2px; }
+  .cb-empty { color: #6b7280; font-size: 13px; font-style: italic; }
+  .cb-heading { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #4b5563; }
+  @media (prefers-color-scheme: dark) {
+    .cb-card { background: #26313d; }
+    .cb-panel { background: #1f2933; border-color: #34414f; }
+    .cb-panel li { border-bottom-color: #34414f; }
+    .cb-heading, .cb-panel h2 { color: #9aa7b5; }
+    .cb-panel .cb-meta, .cb-empty { color: #9aa7b5; }
+  }
+</style>
+{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+
+{% block nav-breadcrumbs %}{% endblock %}
+
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if dashboard_stats.error %}
+    <p class="errornote">{{ dashboard_stats.error }}</p>
+  {% else %}
+    <div class="cb-cards">
+      {% for card in dashboard_stats.cards %}
+        <div class="cb-card">
+          <div class="cb-label">{{ card.label }}</div>
+          <div class="cb-value"><a href="{{ card.url }}">{{ card.value }}</a></div>
+          {% if card.note %}<span class="cb-note">{{ card.note }}</span>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="cb-lists">
+      {% for panel in dashboard_stats.panels %}
+        <div class="cb-panel">
+          <h2>{{ panel.title }}</h2>
+          {% if panel.rows %}
+            <ul>
+              {% for row in panel.rows %}
+                <li>
+                  <a href="{{ row.url }}">{{ row.label }}</a>
+                  {% if row.meta %}<span class="cb-meta">{{ row.meta }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="cb-empty">{{ panel.empty_text }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <h2 class="cb-heading">{% translate 'Applications' %}</h2>
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{% translate 'Recent actions' %}</h2>
+        <h3>{% translate 'My actions' %}</h3>
+            {% load log %}
+            {% get_admin_log 10 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p>{% translate 'None available' %}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+</div>
+{% endblock %}
