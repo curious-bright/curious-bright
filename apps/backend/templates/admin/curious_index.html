@@ -1,111 +1,335 @@
-{% extends "admin/base_site.html" %}
+{% extends "admin/base.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
-<style>
-  .cb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0 0 22px; }
-  .cb-card { background: #1f2933; color: #fff; border-radius: 8px; padding: 14px 16px; }
-  .cb-card .cb-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; opacity: .72; }
-  .cb-card .cb-value { font-size: 27px; font-weight: 700; line-height: 1.15; margin-top: 4px; }
-  .cb-card .cb-value a { color: #8ec7ff; }
-  .cb-card .cb-note { display: block; font-size: 12px; opacity: .7; margin-top: 6px; }
-  .cb-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 22px; }
-  .cb-panel { background: #fff; border: 1px solid var(--hairline-color, #e5e7eb); border-radius: 8px; padding: 12px 14px; }
-  .cb-panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #4b5563; margin: 0 0 8px; }
-  .cb-panel ul { list-style: none; margin: 0; padding: 0; }
-  .cb-panel li { padding: 7px 0; border-bottom: 1px solid #f1f1f1; font-size: 13px; }
-  .cb-panel li:last-child { border-bottom: 0; }
-  .cb-panel .cb-meta { display: block; color: #6b7280; font-size: 12px; margin-top: 2px; }
-  .cb-empty { color: #6b7280; font-size: 13px; font-style: italic; }
-  .cb-heading { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #4b5563; }
-  @media (prefers-color-scheme: dark) {
-    .cb-card { background: #26313d; }
-    .cb-panel { background: #1f2933; border-color: #34414f; }
-    .cb-panel li { border-bottom-color: #34414f; }
-    .cb-heading, .cb-panel h2 { color: #9aa7b5; }
-    .cb-panel .cb-meta, .cb-empty { color: #9aa7b5; }
-  }
-</style>
+{% block title %}Dashboard | {{ site_title }}{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .cb-dash {
+            --cb-card: #ffffff;
+            --cb-border: #e5e7eb;
+            --cb-soft: #f8fafc;
+            --cb-text: #0f172a;
+            --cb-muted: #64748b;
+            --cb-accent: #ff5a36;
+            --cb-accent-soft: #fff1ec;
+            --cb-green: #16a34a;
+            --cb-amber: #d97706;
+            --cb-red: #dc2626;
+            --cb-blue: #2563eb;
+            color: var(--cb-text);
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            padding-bottom: 28px;
+        }
+        .dark .cb-dash {
+            --cb-card: #16181d;
+            --cb-border: #2a2e37;
+            --cb-soft: #1b1e24;
+            --cb-text: #e8eaee;
+            --cb-muted: #98a2b3;
+            --cb-accent-soft: rgba(255, 90, 54, .14);
+            --cb-green: #4ade80;
+            --cb-amber: #fbbf24;
+            --cb-red: #f87171;
+            --cb-blue: #60a5fa;
+        }
+
+        .cb-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; }
+        .cb-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+        .cb-head p { color: var(--cb-muted); font-size: 13px; margin: 4px 0 0; }
+        .cb-head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .cb-btn {
+            align-items: center; border: 1px solid var(--cb-border); border-radius: 8px;
+            color: var(--cb-text); display: inline-flex; font-size: 13px; font-weight: 600;
+            gap: 6px; padding: 9px 14px; text-decoration: none; transition: all .15s ease;
+            background: var(--cb-card);
+        }
+        .cb-btn:hover { border-color: var(--cb-accent); color: var(--cb-accent); }
+        .cb-btn-primary { background: var(--cb-accent); border-color: var(--cb-accent); color: #fff; }
+        .cb-btn-primary:hover { background: #e64a28; border-color: #e64a28; color: #fff; }
+        .cb-btn .material-symbols-outlined { font-size: 17px; }
+
+        .cb-cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+        .cb-card {
+            background: var(--cb-card); border: 1px solid var(--cb-border); border-radius: 12px;
+            color: inherit; display: flex; flex-direction: column; gap: 2px; padding: 16px 18px;
+            text-decoration: none; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+        }
+        .cb-card:hover { border-color: var(--cb-accent); box-shadow: 0 10px 24px -18px rgba(15, 23, 42, .5); transform: translateY(-1px); }
+        .cb-card-top { align-items: center; display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .cb-card-label { color: var(--cb-muted); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+        .cb-card-icon {
+            align-items: center; background: var(--cb-accent-soft); border-radius: 9px; color: var(--cb-accent);
+            display: inline-flex; height: 34px; justify-content: center; width: 34px;
+        }
+        .cb-card-icon .material-symbols-outlined { font-size: 20px; }
+        .cb-card-value { font-size: 30px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+        .cb-card-note { color: var(--cb-muted); font-size: 12px; margin-top: 2px; }
+        .cb-card-note.up { color: var(--cb-green); }
+        .cb-card-note.down { color: var(--cb-red); }
+        .cb-card-note.warn { color: var(--cb-amber); }
+        .cb-card-note.good { color: var(--cb-green); }
+
+        .cb-panel {
+            background: var(--cb-card); border: 1px solid var(--cb-border); border-radius: 12px;
+            display: flex; flex-direction: column; padding: 18px 20px;
+        }
+        .cb-panel-head { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-bottom: 16px; }
+        .cb-panel h2 { font-size: 14px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+        .cb-panel-sub { color: var(--cb-muted); font-size: 12px; margin: 3px 0 0; }
+
+        .cb-grid-2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); }
+        .cb-grid-2-even { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+        .cb-legend { align-items: center; color: var(--cb-muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: 14px; }
+        .cb-legend span { align-items: center; display: inline-flex; gap: 6px; }
+        .cb-dot { border-radius: 999px; display: inline-block; height: 9px; width: 9px; }
+        .cb-dot-members { background: var(--cb-accent); }
+        .cb-dot-posts { background: var(--cb-blue); }
+
+        .cb-chart { display: flex; flex: 1; min-height: 190px; padding-top: 6px; }
+        .cb-bars { align-items: flex-end; display: flex; flex: 1; gap: 4px; justify-content: space-between; }
+        .cb-day { align-items: center; display: flex; flex: 1; flex-direction: column; gap: 7px; height: 100%; justify-content: flex-end; min-width: 0; }
+        .cb-bar-pair { align-items: flex-end; display: flex; flex: 1; gap: 3px; justify-content: center; width: 100%; }
+        .cb-bar { border-radius: 4px 4px 2px 2px; display: block; min-height: 2px; transition: opacity .15s ease; width: 38%; max-width: 9px; }
+        .cb-bar-members { background: linear-gradient(180deg, #ff8a6c, var(--cb-accent)); }
+        .cb-bar-posts { background: linear-gradient(180deg, #93b4f8, var(--cb-blue)); }
+        .cb-day:hover .cb-bar { opacity: .72; }
+        .cb-day-label { color: var(--cb-muted); font-size: 10px; line-height: 1; }
+        .cb-chart-foot { color: var(--cb-muted); border-top: 1px solid var(--cb-border); font-size: 12px; margin-top: 12px; padding-top: 10px; }
+
+        .cb-donut-wrap { align-items: center; display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+        .cb-donut {
+            align-items: center; border-radius: 999px; display: flex; height: 170px; justify-content: center;
+            position: relative; width: 170px;
+        }
+        .cb-donut-hole {
+            align-items: center; background: var(--cb-card); border-radius: 999px; display: flex;
+            flex-direction: column; height: 118px; justify-content: center; width: 118px;
+        }
+        .cb-donut-hole strong { font-size: 27px; letter-spacing: -.03em; line-height: 1; }
+        .cb-donut-hole span { color: var(--cb-muted); font-size: 11px; letter-spacing: .06em; margin-top: 3px; text-transform: uppercase; }
+        .cb-legend-list { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; min-width: 150px; padding: 0; }
+        .cb-legend-list li { align-items: center; display: flex; font-size: 13px; gap: 8px; justify-content: space-between; }
+        .cb-legend-list .cb-key { align-items: center; color: var(--cb-muted); display: inline-flex; gap: 7px; }
+        .cb-legend-list .cb-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+        .cb-legend-list .cb-pct { color: var(--cb-muted); font-size: 11px; font-weight: 400; margin-left: 5px; }
+
+        .cb-bars-list { display: flex; flex-direction: column; gap: 13px; }
+        .cb-bar-row { display: flex; flex-direction: column; gap: 6px; }
+        .cb-bar-row-top { align-items: baseline; display: flex; font-size: 13px; justify-content: space-between; }
+        .cb-bar-row-top span:last-child { color: var(--cb-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .cb-track { background: var(--cb-soft); border-radius: 999px; height: 7px; overflow: hidden; }
+        .cb-fill { background: linear-gradient(90deg, #ff8a6c, var(--cb-accent)); border-radius: 999px; height: 100%; }
+
+        .cb-people { display: flex; flex-direction: column; gap: 2px; }
+        .cb-person { align-items: center; border-radius: 8px; color: inherit; display: flex; gap: 11px; padding: 8px 6px; text-decoration: none; }
+        .cb-person:hover { background: var(--cb-soft); }
+        .cb-avatar {
+            align-items: center; background: var(--cb-accent-soft); border-radius: 999px; color: var(--cb-accent);
+            display: inline-flex; font-size: 12px; font-weight: 700; height: 30px; justify-content: center;
+            text-transform: uppercase; width: 30px;
+        }
+        .cb-person-name { flex: 1; font-size: 13px; font-weight: 500; }
+        .cb-person-count { color: var(--cb-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .cb-empty { color: var(--cb-muted); font-size: 13px; font-style: italic; margin: 6px 0; }
+
+        .cb-panels { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .cb-panel ul.cb-feed { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+        .cb-feed li { border-bottom: 1px solid var(--cb-border); padding: 9px 0; }
+        .cb-feed li:last-child { border-bottom: 0; }
+        .cb-feed a { color: inherit; font-size: 13px; font-weight: 600; text-decoration: none; }
+        .cb-feed a:hover { color: var(--cb-accent); }
+        .cb-feed .cb-meta { color: var(--cb-muted); display: block; font-size: 12px; margin-top: 2px; }
+        .cb-more { color: var(--cb-accent); font-size: 12px; font-weight: 600; margin-top: 10px; text-decoration: none; }
+        .cb-more:hover { text-decoration: underline; }
+
+        .cb-apps { padding: 18px 20px; }
+        .cb-apps > h2 { margin-bottom: 12px; }
+
+        .cb-error { background: var(--cb-accent-soft); border: 1px solid var(--cb-accent); border-radius: 10px; color: var(--cb-accent); font-size: 13px; padding: 12px 14px; }
+
+        @media (max-width: 1100px) {
+            .cb-grid-2 { grid-template-columns: minmax(0, 1fr); }
+            .cb-grid-2-even { grid-template-columns: minmax(0, 1fr); }
+        }
+    </style>
 {% endblock %}
-
-{% block coltype %}colMS{% endblock %}
-
-{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
-
-{% block nav-breadcrumbs %}{% endblock %}
-
-{% block nav-sidebar %}{% endblock %}
 
 {% block content %}
-<div id="content-main">
-  {% if dashboard_stats.error %}
-    <p class="errornote">{{ dashboard_stats.error }}</p>
-  {% else %}
-    <div class="cb-cards">
-      {% for card in dashboard_stats.cards %}
-        <div class="cb-card">
-          <div class="cb-label">{{ card.label }}</div>
-          <div class="cb-value"><a href="{{ card.url }}">{{ card.value }}</a></div>
-          {% if card.note %}<span class="cb-note">{{ card.note }}</span>{% endif %}
-        </div>
-      {% endfor %}
-    </div>
+{% with stats=dashboard_stats %}
+<div class="cb-dash">
+    {% if stats.error %}
+        <div class="cb-error">{{ stats.error }}</div>
+    {% else %}
+        <header class="cb-head">
+            <div>
+                <h1>Community overview</h1>
+                <p>Welcome back, {{ user.get_short_name|default:user.username }} &middot; {{ stats.today }}</p>
+            </div>
+            <div class="cb-head-actions">
+                <a class="cb-btn" href="{% url 'admin:moderation_report_changelist' %}?is_resolved__exact=0">
+                    <span class="material-symbols-outlined">flag</span>
+                    Review reports ({{ stats.summary.open_reports }})
+                </a>
+                <a class="cb-btn cb-btn-primary" href="{% url 'admin:community_post_changelist' %}?review_status__exact=pending">
+                    <span class="material-symbols-outlined">fact_check</span>
+                    Review queue ({{ stats.summary.pending_posts }})
+                </a>
+            </div>
+        </header>
 
-    <div class="cb-lists">
-      {% for panel in dashboard_stats.panels %}
-        <div class="cb-panel">
-          <h2>{{ panel.title }}</h2>
-          {% if panel.rows %}
-            <ul>
-              {% for row in panel.rows %}
-                <li>
-                  <a href="{{ row.url }}">{{ row.label }}</a>
-                  {% if row.meta %}<span class="cb-meta">{{ row.meta }}</span>{% endif %}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="cb-empty">{{ panel.empty_text }}</p>
-          {% endif %}
-        </div>
-      {% endfor %}
-    </div>
-  {% endif %}
-
-  <h2 class="cb-heading">{% translate 'Applications' %}</h2>
-  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
-</div>
-{% endblock %}
-
-{% block sidebar %}
-<div id="content-related">
-    <div class="module" id="recent-actions-module">
-        <h2>{% translate 'Recent actions' %}</h2>
-        <h3>{% translate 'My actions' %}</h3>
-            {% load log %}
-            {% get_admin_log 10 as admin_log for_user user %}
-            {% if not admin_log %}
-            <p>{% translate 'None available' %}</p>
-            {% else %}
-            <ul class="actionlist">
-            {% for entry in admin_log %}
-            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
-                <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
-                {% if entry.is_deletion or not entry.get_admin_url %}
-                    {{ entry.object_repr }}
-                {% else %}
-                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
-                {% endif %}
-                <br>
-                {% if entry.content_type %}
-                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
-                {% else %}
-                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
-                {% endif %}
-            </li>
+        <section class="cb-cards" aria-label="Key metrics">
+            {% for card in stats.cards %}
+                <a class="cb-card" href="{{ card.url }}">
+                    <div class="cb-card-top">
+                        <span class="cb-card-label">{{ card.label }}</span>
+                        <span class="cb-card-icon"><span class="material-symbols-outlined">{{ card.icon }}</span></span>
+                    </div>
+                    <span class="cb-card-value">{{ card.value }}</span>
+                    {% if card.note %}<span class="cb-card-note {{ card.tone }}">{{ card.note }}</span>{% endif %}
+                </a>
             {% endfor %}
-            </ul>
-            {% endif %}
-    </div>
+        </section>
+
+        <section class="cb-grid-2">
+            <div class="cb-panel">
+                <div class="cb-panel-head">
+                    <div>
+                        <h2>Activity</h2>
+                        <p class="cb-panel-sub">Last 14 days</p>
+                    </div>
+                    <div class="cb-legend">
+                        <span><i class="cb-dot cb-dot-members"></i>Members</span>
+                        <span><i class="cb-dot cb-dot-posts"></i>Posts</span>
+                    </div>
+                </div>
+                <div class="cb-chart">
+                    <div class="cb-bars">
+                        {% for day in stats.activity.days %}
+                            <div class="cb-day" title="{{ day.full }}: {{ day.members }} new members, {{ day.posts }} posts">
+                                <div class="cb-bar-pair">
+                                    <span class="cb-bar cb-bar-members" style="height: {{ day.member_pct }}%"></span>
+                                    <span class="cb-bar cb-bar-posts" style="height: {{ day.post_pct }}%"></span>
+                                </div>
+                                <span class="cb-day-label">{{ day.label }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <p class="cb-chart-foot">Busiest day in this window: {{ stats.activity.peak }} event{{ stats.activity.peak|pluralize }}. Hover a day for details.</p>
+            </div>
+
+            <div class="cb-panel">
+                <div class="cb-panel-head">
+                    <div>
+                        <h2>Review status</h2>
+                        <p class="cb-panel-sub">All posts by moderation state</p>
+                    </div>
+                </div>
+                <div class="cb-donut-wrap">
+                    <div class="cb-donut" style="background: conic-gradient(#16a34a 0 {{ stats.status.published_end }}%, #f59e0b {{ stats.status.published_end }}% {{ stats.status.pending_end }}%, #dc2626 {{ stats.status.pending_end }}% 100%);">
+                        <div class="cb-donut-hole">
+                            <strong>{{ stats.status.total }}</strong>
+                            <span>posts</span>
+                        </div>
+                    </div>
+                    <ul class="cb-legend-list">
+                        <li>
+                            <span class="cb-key"><i class="cb-dot" style="background:#16a34a"></i>Published</span>
+                            <span class="cb-val">{{ stats.status.published.count }}<span class="cb-pct">{{ stats.status.published.pct }}%</span></span>
+                        </li>
+                        <li>
+                            <span class="cb-key"><i class="cb-dot" style="background:#f59e0b"></i>Pending</span>
+                            <span class="cb-val">{{ stats.status.pending.count }}<span class="cb-pct">{{ stats.status.pending.pct }}%</span></span>
+                        </li>
+                        <li>
+                            <span class="cb-key"><i class="cb-dot" style="background:#dc2626"></i>Rejected</span>
+                            <span class="cb-val">{{ stats.status.rejected.count }}<span class="cb-pct">{{ stats.status.rejected.pct }}%</span></span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="cb-grid-2-even">
+            <div class="cb-panel">
+                <div class="cb-panel-head">
+                    <div>
+                        <h2>Subject mix</h2>
+                        <p class="cb-panel-sub">Posts per subject area</p>
+                    </div>
+                    <a class="cb-more" href="{% url 'admin:community_post_changelist' %}">All posts</a>
+                </div>
+                {% if stats.subjects %}
+                    <div class="cb-bars-list">
+                        {% for subject in stats.subjects %}
+                            <div class="cb-bar-row">
+                                <div class="cb-bar-row-top">
+                                    <span>{{ subject.label }}</span>
+                                    <span>{{ subject.count }}</span>
+                                </div>
+                                <div class="cb-track"><div class="cb-fill" style="width: {{ subject.pct }}%"></div></div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="cb-empty">No posts yet.</p>
+                {% endif %}
+            </div>
+
+            <div class="cb-panel">
+                <div class="cb-panel-head">
+                    <div>
+                        <h2>Top contributors</h2>
+                        <p class="cb-panel-sub">Most posts written</p>
+                    </div>
+                    <a class="cb-more" href="{% url 'admin:accounts_user_changelist' %}">All members</a>
+                </div>
+                {% if stats.contributors %}
+                    <div class="cb-people">
+                        {% for person in stats.contributors %}
+                            <a class="cb-person" href="{{ person.url }}">
+                                <span class="cb-avatar">{{ person.username|slice:":2" }}</span>
+                                <span class="cb-person-name">{{ person.username }}</span>
+                                <span class="cb-person-count">{{ person.posts }} post{{ person.posts|pluralize }}</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="cb-empty">No contributions yet.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="cb-panels">
+            {% for panel in stats.panels %}
+                <div class="cb-panel">
+                    <div class="cb-panel-head"><h2>{{ panel.title }}</h2></div>
+                    {% if panel.rows %}
+                        <ul class="cb-feed">
+                            {% for row in panel.rows %}
+                                <li>
+                                    <a href="{{ row.url }}">{{ row.label }}</a>
+                                    <span class="cb-meta">{{ row.meta }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="cb-empty">{{ panel.empty_text }}</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </section>
+
+        <section class="cb-panel cb-apps">
+            <h2>All applications</h2>
+            {% include "unfold/helpers/app_list_default.html" with show_changelinks=True %}
+        </section>
+    {% endif %}
 </div>
+{% endwith %}
 {% endblock %}

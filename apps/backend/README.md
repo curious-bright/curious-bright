@@ -1,6 +1,7 @@
 # Curious Bright Backend (Django)
 
-Django 5.2 + DRF + SimpleJWT + PostgreSQL API. Replaces the retired Express backend.
+Django 5.2 + DRF + SimpleJWT + PostgreSQL API with a Unfold-powered admin.
+Replaces the retired Express backend.
 
 ## Quick start (local, SQLite)
 
@@ -46,11 +47,13 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
 - `start.sh` only calls it when all three `ADMIN_*` vars are set; otherwise it
   logs a skip message and the deploy continues. Create the superuser yourself
   from the server shell instead: `python manage.py createsuperuser`.
-- **Admin dashboard:** `/admin/` logs in with username + password and shows an
-  analytics overview — member, post, open-report, pending-application, room,
-  comment, research-document and badge counts — plus recent-activity panels
-  (posts awaiting review, open reports, pending moderator applications, newest
-  members) and the Recent actions sidebar.
+- **Admin dashboard:** `/admin/` logs in with username + password and runs on
+  the Django Unfold theme (light/dark, branded navigation). It shows metric
+  cards — member, post, open-report, pending-application, room, comment,
+  research-document and badge counts — a 14-day activity chart, review-status
+  donut, subject mix, top contributors, and recent-activity panels (posts
+  awaiting review, open reports, pending moderator applications, newest
+  members).
 - Data migration `accounts/0002_bootstrap_admin` runs the same logic at deploy
   time but is **lenient**: if the env vars are missing it is a no-op, so builds
   don't break.

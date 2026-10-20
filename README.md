@@ -118,10 +118,11 @@ if needed, then starts gunicorn on `$PORT`.
    `GET /api/posts/`.
 
 The admin at `https://api.curiousbright.com.ng/admin/` opens with a
-**username + password login** and an analytics overview: member/post/report/
-application/room/document/badge counts, plus recent activity panels (posts
-awaiting review, open reports, pending moderator applications, newest members)
-and the standard Recent actions sidebar.
+**username + password login** and a modern dashboard (Django Unfold theme, light
+and dark modes): member/post/report/application/room/document/badge metrics, a
+14-day activity chart, review-status donut, subject mix, top contributors, and
+recent-activity panels (posts awaiting review, open reports, pending moderator
+applications, newest members).
 
 > [!IMPORTANT]
 > If a deploy ever fails with `relation "accounts_user" does not exist` while
