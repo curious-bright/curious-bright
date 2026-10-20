@@ -106,11 +106,16 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         {navLink('/submit', 'bx bx-upload', 'Share a Paper')}
         {navLink('/community', 'bx bx-video', 'Study Rooms')}
 
-        <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
-          Review Queue
-        </div>
-
-        {navLink('/moderate', 'bx bx-shield-quarter', 'Community Review')}
+        {isAuthenticated && (
+          <>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
+              Review Queue
+            </div>
+            {user?.can_moderate
+              ? navLink('/moderate', 'bx bx-shield-quarter', 'Community Review')
+              : navLink('/apply-moderator', 'bx bx-shield-quarter', 'Become a Moderator')}
+          </>
+        )}
       </nav>
 
       {/* User Card */}
