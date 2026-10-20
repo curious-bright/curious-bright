@@ -4,6 +4,8 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+from django.urls import reverse_lazy
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -26,6 +28,9 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 
 INSTALLED_APPS = [
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -74,6 +79,96 @@ TEMPLATES = [
         },
     },
 ]
+
+UNFOLD = {
+    "SITE_TITLE": "Curious Bright Admin",
+    "SITE_HEADER": "Curious Bright",
+    "SITE_SUBHEADER": "Community administration",
+    "SITE_URL": "/",
+    "SITE_SYMBOL": "school",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "DASHBOARD_CALLBACK": "apps.core.admin.dashboard_callback",
+    "COLORS": {
+        "primary": {
+            "50": "#FFF3F0",
+            "100": "#FFE3DC",
+            "200": "#FFC7B9",
+            "300": "#FFA48D",
+            "400": "#FF7A59",
+            "500": "#FF5A36",
+            "600": "#EE3F19",
+            "700": "#C73214",
+            "800": "#A02B14",
+            "900": "#7F2615",
+            "950": "#451008",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Overview",
+                "items": [
+                    {
+                        "title": "Dashboard",
+                        "icon": "space_dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
+            {
+                "title": "Community",
+                "items": [
+                    {"title": "Posts", "icon": "article", "link": reverse_lazy("admin:community_post_changelist")},
+                    {"title": "Comments", "icon": "forum", "link": reverse_lazy("admin:community_comment_changelist")},
+                    {"title": "Likes", "icon": "thumb_up", "link": reverse_lazy("admin:community_like_changelist")},
+                    {"title": "Helpful reactions", "icon": "volunteer_activism", "link": reverse_lazy("admin:community_helpfulreaction_changelist")},
+                    {"title": "Equations", "icon": "functions", "link": reverse_lazy("admin:community_equation_changelist")},
+                    {"title": "Notifications", "icon": "notifications", "link": reverse_lazy("admin:community_notification_changelist")},
+                ],
+            },
+            {
+                "title": "Moderation",
+                "items": [
+                    {"title": "Reports", "icon": "flag", "link": reverse_lazy("admin:moderation_report_changelist")},
+                    {"title": "Moderator applications", "icon": "how_to_reg", "link": reverse_lazy("admin:moderation_moderatorapplication_changelist")},
+                ],
+            },
+            {
+                "title": "Study rooms",
+                "items": [
+                    {"title": "Rooms", "icon": "meeting_room", "link": reverse_lazy("admin:rooms_room_changelist")},
+                    {"title": "Messages", "icon": "chat", "link": reverse_lazy("admin:rooms_roommessage_changelist")},
+                ],
+            },
+            {
+                "title": "Research",
+                "items": [
+                    {"title": "Documents", "icon": "science", "link": reverse_lazy("admin:research_researchdocument_changelist")},
+                    {"title": "Collaborations", "icon": "handshake", "link": reverse_lazy("admin:research_collaboration_changelist")},
+                    {"title": "Revisions", "icon": "history", "link": reverse_lazy("admin:research_researchdocumentrevision_changelist")},
+                ],
+            },
+            {
+                "title": "Gamification",
+                "items": [
+                    {"title": "Badges", "icon": "military_tech", "link": reverse_lazy("admin:gamification_badge_changelist")},
+                    {"title": "Awarded badges", "icon": "workspace_premium", "link": reverse_lazy("admin:gamification_userbadge_changelist")},
+                ],
+            },
+            {
+                "title": "Accounts",
+                "items": [
+                    {"title": "Users", "icon": "group", "link": reverse_lazy("admin:accounts_user_changelist")},
+                    {"title": "Profiles", "icon": "badge", "link": reverse_lazy("admin:accounts_profile_changelist")},
+                    {"title": "Follows", "icon": "person_add", "link": reverse_lazy("admin:accounts_follow_changelist")},
+                ],
+            },
+        ],
+    },
+}
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
