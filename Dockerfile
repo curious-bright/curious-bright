@@ -1,66 +1,21 @@
-FROM node:20-alpine AS base
+# Curious Bright — Django API (apps/backend)
+FROM python:3.12-slim AS base
 
-# Install OpenSSL and libc compatibility for Prisma engine on Alpine
-RUN apk add --no-cache openssl libc6-compat
-
-# Enable pnpm via corepack
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# 1. Copy root workspace configurations
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# Dependencies
+COPY apps/backend/requirements.txt ./apps/backend/requirements.txt
+RUN pip install --no-cache-dir -r apps/backend/requirements.txt
 
-# 2. Copy shared packages and server applications
-COPY packages ./packages
+# Application code
 COPY apps/backend ./apps/backend
-COPY apps/realtime-gateway ./apps/realtime-gateway
-COPY apps/signaling-service ./apps/signaling-service
+WORKDIR /app/apps/backend
 
-# 3. Install all monorepo dependencies
-RUN pnpm install --frozen-lockfile
+# Static files are collected at runtime by scripts/start.sh (needs SECRET_KEY);
+# migrate + ensure_admin also run at container start so admin exists on every deploy.
+EXPOSE 8000
 
-# 4. Generate Prisma client (provide dummy DATABASE_URL for build phase)
-ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/curious_bright"
-RUN pnpm --filter @curious-bright/database generate
-
-# 5. Build all shared packages, then apps
-RUN pnpm --filter @curious-bright/database build
-RUN pnpm --filter @curious-bright/validation build
-RUN pnpm --filter @curious-bright/types build
-RUN pnpm --filter @curious-bright/realtime-contracts build
-RUN pnpm --filter @curious-bright/whiteboard-engine build
-RUN pnpm --filter backend build
-RUN pnpm --filter realtime-gateway build
-RUN pnpm --filter signaling-service build
-
-# --- Production Runner Stage ---
-FROM node:20-alpine AS runner
-WORKDIR /app
-
-RUN apk add --no-cache openssl libc6-compat
-
-ENV NODE_ENV=production
-ENV PORT=4000
-ENV REALTIME_PORT=4001
-ENV SIGNALING_PORT=4002
-
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-
-# Copy workspace setup and built code
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/packages ./packages
-COPY --from=base /app/apps/backend ./apps/backend
-COPY --from=base /app/apps/realtime-gateway ./apps/realtime-gateway
-COPY --from=base /app/apps/signaling-service ./apps/signaling-service
-
-# Expose backend (4000), realtime (4001), signaling (4002)
-EXPOSE 4000 4001 4002
-
-# Default process: Curious Bright Backend API + Realtime Server
-CMD ["node", "apps/backend/dist/index.js"]
+ENTRYPOINT ["bash", "scripts/start.sh"]
