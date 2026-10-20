@@ -26,6 +26,8 @@ export interface Me {
     badges: BadgeInfo[];
     created_at: string;
   };
+  is_moderator: boolean;
+  can_moderate: boolean;
 }
 
 interface AuthContextValue {

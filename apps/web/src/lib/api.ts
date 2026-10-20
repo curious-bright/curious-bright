@@ -26,6 +26,25 @@ export class ApiError extends Error implements ApiErrorShape {
   }
 }
 
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+/**
+ * Django's paginated list responses arrive as {count,next,previous,results};
+ * a few endpoints return bare arrays. Components should always read lists
+ * through this helper so either shape works and a failed request yields [].
+ */
+export function resultsOf<T = any>(data: Partial<Paginated<T>> | T[] | null | undefined): T[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  const wrapped = (data as Partial<Paginated<T>>).results;
+  return Array.isArray(wrapped) ? wrapped : [];
+}
+
 export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);
 }
