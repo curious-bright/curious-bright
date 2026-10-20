@@ -1,9 +1,9 @@
 # Curious Bright
 
 ## Overview
-**Curious Bright** is an open-source academic repository and real-time collaboration platform designed for learners, researchers, and educators spanning from High School to PhD candidates, as well as educational NGOs worldwide. The platform empowers students and academic communities to publish research, exchange discoveries, participate in peer review, and engage in real-time academic discussion through integrated communication tools.
+**Curious Bright** is an open-source academic repository and collaboration platform for learners, researchers, and educators — from high school to PhD candidates, and educational NGOs worldwide. Members publish papers and notes, exchange explanations, take part in community peer review, and collaborate in study rooms and shared research documents.
 
-By bridging the gap between open-access publication and real-time interactive learning, Curious Bright creates a global digital common room for intellectual exploration. Users can seamlessly conduct live research sessions, co-author documents, collaborate on interactive digital whiteboards, and hold high-definition video conferences all within a unified, open workspace.
+By pairing open-access publishing with a discussion-first community, Curious Bright gives every learner a common room for intellectual exploration: share a paper, ask a question, explain an answer, and build research together.
 
 > [!NOTE]
 > **A Note on the Name:**
@@ -13,67 +13,59 @@ By bridging the gap between open-access publication and real-time interactive le
 
 ## System Architecture
 
-Curious Bright is architected as a high-performance TypeScript monorepo managed with **Turborepo** and **PNPM Workspaces**:
+The active product is a **Django REST API** (`apps/backend`) with two React/Vite clients (`apps/web`, `apps/landing-page`). The repository is still a PNPM workspace so legacy TypeScript packages remain buildable while they are retired:
 
 ```text
 curious-bright/
 ├── apps/
 │   ├── backend/             # Django REST API (Python) — see apps/backend/README.md
-│   ├── landing-page/        # Marketing site (React + Vite + Tailwind)
-│   ├── mobile/              # React Native + Expo Mobile Application
-│   ├── realtime-gateway/    # Socket.io & Redis State Synchronization
-│   ├── signaling-service/   # WebRTC Signaling Service
-│   └── web/                 # React + Vite Web Client
-├── packages/
-│   ├── database/            # PostgreSQL & Prisma ORM Schema & Client
-│   ├── realtime-contracts/  # Shared Realtime Gateway Event Specs
-│   ├── types/               # Shared TypeScript Type Definitions
-│   ├── ui-kit/              # Shared UI Component Library
-│   ├── validation/          # Shared Zod Data Validation Schemas
-│   └── whiteboard-engine/   # Yjs CRDT Real-time Whiteboard Engine
+│   ├── landing-page/        # Marketing site (React + Vite)
+│   ├── web/                 # React + Vite web client
+│   ├── mobile/              # Legacy Expo app (not deployed)
+│   ├── realtime-gateway/    # Legacy Socket.io gateway (not deployed)
+│   └── signaling-service/   # Legacy WebRTC signaling (not deployed)
+└── packages/                # Legacy shared TS packages (realtime-contracts, types,
+                             # ui-kit, validation, whiteboard-engine, Prisma database)
 ```
 
 ---
 
 ## Tech Stack & Infrastructure
 
-- **Monorepo Build Tooling:** [Turborepo](https://turbo.build/) & [PNPM Workspaces](https://pnpm.io/)
 - **Backend API:** Django 5.2 + Django REST Framework + SimpleJWT (`apps/backend`)
-- **Database & ORM:** PostgreSQL with Django Migrations (SQLite fallback for local dev)
-- **Web Application:** React 18 & Vite
-- **Mobile Application:** React Native with Expo
-- **Real-Time Gateway:** Socket.io paired with Redis for pub/sub messaging and state sync
-- **Collaborative Canvas:** [Yjs](https://yjs.dev/) CRDT framework for real-time shared whiteboards
-- **Video & Audio Infrastructure:** [LiveKit](https://livekit.io/) WebRTC server infrastructure
-- **Object Storage:** S3-compatible object storage (MinIO for local development)
+- **Database & ORM:** PostgreSQL with Django migrations (SQLite fallback for local dev)
+- **Web & Marketing:** React 18 + Vite; the web client uses hand-written CSS utilities
+- **Deployment:** Northflank (Docker image + managed PostgreSQL addon)
+- **Legacy (not part of the current deploy):** Turborepo/PNPM tooling, Prisma, Socket.io,
+  Yjs whiteboard engine, LiveKit video, React Native/Expo
 
 ---
 
 ## Key Features
 
 - **Community Knowledge Feed:** Posts, threaded comments, LaTeX equations, likes, “this helped me”, follows, mentions and notifications — a knowledge-sharing community for students, teachers and researchers (not math-only).
+- **Open Library & Review Queue:** Upload PDF papers (≤25 MB) or publish plain notes; PDF submissions enter a moderator review queue before they are publicly listed. Browse papers and notes with subject/level filters and server-side search.
+- **Community Moderation:** Members report posts, moderators resolve reports, and members can apply to join the review team. Roles are exposed as `is_moderator` / `can_moderate`.
+- **Study Rooms & Global Search:** Create or join study rooms with live message polling, and search across papers, notes, rooms and co-authors.
 - **Gamification Badges:** Automatic `Teacher`, `Solver` and `Collaborator` badges awarded on the platform’s core actions, shown on profiles.
 - **Research Collaboration:** Invite co-authors to research documents, edit live with revision history; editing co-authors earn the Collaborator badge.
 - **Centralized Error Handling:** Every API error returns `{code, message, details}`; the web client surfaces it through a single global alert and one API wrapper (auto token refresh, no alert storms).
-- **Open Academic Publishing & Peer Review:** Publish academic articles, research papers, and preprints across various disciplines with built-in community peer-review tools.
-- **Real-Time Interactive Whiteboard:** Collaborative canvas using CRDTs (`Yjs` + `whiteboard-engine`) enabling low-latency concurrent drawing and document annotation.
-- **High-Definition Video Conferencing:** Integrated LiveKit WebRTC conferencing for live research meetings, virtual classrooms, and study groups.
-- **Cross-Platform Access:** Responsive web portal, landing page and mobile app (Expo) ensuring seamless participation anywhere.
+- **Cross-Platform Access:** Responsive web portal and landing page; the legacy Expo app is not part of the current deployment.
 
 ---
 
 ## Getting Started & Development Setup
 
 ### Prerequisites
-- Node.js (v18+)
-- `pnpm` (`npm i -g pnpm`)
+- Node.js (v18+) and `pnpm` (`npm i -g pnpm`)
 - Python 3.12+
-- Docker & Docker Compose
+- Docker & Docker Compose (optional — only for a local PostgreSQL)
 
-### 1. Start Infrastructure Dependencies
-Launch PostgreSQL (and other services used by the legacy realtime stack):
+### 1. Database (optional)
+SQLite is the default for local development. To use PostgreSQL instead:
 ```bash
 docker compose up -d
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/curiousbright
 ```
 
 ### 2. Install Monorepo Dependencies
@@ -101,6 +93,36 @@ pnpm run dev
 ```
 Backend-only commands: `pnpm run backend:migrate`, `pnpm run backend:admin`,
 `pnpm run backend:dev`.
+
+---
+
+## Deployment (Northflank)
+
+The backend ships as a Docker image built from the repository root (`Dockerfile`);
+its entrypoint (`apps/backend/scripts/start.sh`) runs migrations, creates the admin
+if needed, then starts gunicorn on `$PORT`.
+
+1. **Create the service** from this repository, build using the root `Dockerfile`,
+   and expose port `8000` (or use the platform-provided `PORT`).
+2. **Add a PostgreSQL addon** and link it to the service. Northflank injects its
+   connection string; expose it to Django as `DATABASE_URL`.
+3. **Set secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
+   `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, and the first-deploy
+   `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+4. **Deploy.** The logs should show each migration applying, then
+   `ensure_admin`, then gunicorn binding to the port. Health-check the API with
+   `GET /api/posts/`.
+
+> [!IMPORTANT]
+> If a deploy ever fails with `relation "accounts_user" does not exist` while
+> applying `accounts.0002_bootstrap_admin`, the addon holds stale
+> `django_migrations` rows from a partial deploy. For a fresh environment, reset
+> the addon schema (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`) and
+> redeploy. See [apps/backend/README.md](apps/backend/README.md) for details.
+
+Uploaded PDFs are written to the container filesystem, so they do not survive a
+redeploy. Attach a persistent volume at `apps/backend/media` or move media to
+object storage before relying on paper uploads in production.
 
 ---
 

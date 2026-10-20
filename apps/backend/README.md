@@ -15,7 +15,7 @@ venv/bin/python manage.py runserver 8765
 ```
 
 With `DATABASE_URL` unset, SQLite (`db.sqlite3`) is used automatically. Production
-must set `DATABASE_URL` (PostgreSQL) — see `render.yaml` and `Dockerfile`.
+must set `DATABASE_URL` (PostgreSQL) — see [Deployment](#deployment-northflank).
 
 ## Environment variables
 
@@ -46,6 +46,35 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
 - Data migration `accounts/0002_bootstrap_admin` runs the same logic at deploy
   time but is **lenient**: if the env vars are missing it is a no-op, so builds
   don't break.
+
+## Deployment (Northflank)
+
+- **Image:** built from the repository root `Dockerfile`. The entrypoint is
+  `apps/backend/scripts/start.sh`, which runs `migrate --noinput`,
+  `ensure_admin`, then gunicorn on `${PORT:-8000}`.
+- **Database:** link a Northflank PostgreSQL addon to the service and expose its
+  connection string as `DATABASE_URL`. Keep `DJANGO_DEBUG=false`.
+- **Required secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
+  `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, plus `ADMIN_USERNAME`,
+  `ADMIN_EMAIL`, `ADMIN_PASSWORD` for the first deploy.
+- **First boot:** expect one `Applying …` line per migration, then gunicorn
+  startup. `render.yaml` is a legacy template and is not used by Northflank.
+- **Troubleshooting stale databases:** `relation "accounts_user" does not exist`
+  during `accounts.0002_bootstrap_admin` means `django_migrations` records
+  `accounts.0001_initial` while the table was never created (partial deploy).
+  Confirm with `\dt` and `SELECT * FROM django_migrations WHERE app='accounts';`.
+  For a fresh environment, reset the schema and redeploy:
+
+  ```sql
+  DROP SCHEMA public CASCADE;
+  CREATE SCHEMA public;
+  ```
+
+  Do not delete migration rows selectively — other apps may be recorded without
+  their tables too.
+- **Media files:** `MEDIA_ROOT` is inside the container, so uploaded PDFs are
+  lost on redeploy. Mount a persistent volume at `apps/backend/media` (or switch
+  to object storage) for durable uploads.
 
 ## API overview (all JSON, trailing slashes)
 
