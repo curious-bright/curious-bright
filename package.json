@@ -7,7 +7,10 @@
   ],
   "scripts": {
     "build": "turbo run build",
-    "start": "node apps/backend/dist/index.js",
+    "start": "bash apps/backend/scripts/start.sh",
+    "backend:dev": "apps/backend/venv/bin/python apps/backend/manage.py runserver 0.0.0.0:8000",
+    "backend:migrate": "apps/backend/venv/bin/python apps/backend/manage.py migrate",
+    "backend:admin": "apps/backend/venv/bin/python apps/backend/manage.py ensure_admin",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",

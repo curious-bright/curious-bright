@@ -1,1 +1,1 @@
-web: node apps/backend/dist/index.js
+web: bash apps/backend/scripts/start.sh

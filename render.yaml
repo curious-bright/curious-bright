@@ -1,19 +1,29 @@
 services:
   - type: web
     name: curious-bright-backend
-    env: node
+    env: python
     region: oregon
     plan: free
-    buildCommand: pnpm install --frozen-lockfile --prod=false; pnpm --filter @curious-bright/database run generate; pnpm --filter @curious-bright/database run db:push; pnpm --filter backend run build
-    startCommand: node apps/backend/dist/index.js
+    buildCommand: pip install -r apps/backend/requirements.txt
+    startCommand: bash apps/backend/scripts/start.sh
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 4000
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: curiousbright.com.ng,www.curiousbright.com.ng,api.curiousbright.com.ng
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://curiousbright.com.ng,https://app.curiousbright.com.ng,https://org.curiousbright.com.ng
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://curiousbright.com.ng,https://app.curiousbright.com.ng,https://org.curiousbright.com.ng
       - key: DATABASE_URL
         sync: false
-      - key: JWT_SECRET
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
         generateValue: true
-      - key: ALLOWED_ORIGINS
-        value: https://curiousbright.com.ng,https://app.curiousbright.com.ng,https://org.curiousbright.com.ng
+      - key: PORT
+        value: 10000
