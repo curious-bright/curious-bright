@@ -129,6 +129,9 @@ export default function PostDetail() {
   const [post, setPost] = useState<FeedPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentBody, setCommentBody] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reported, setReported] = useState(false);
 
   const loadPost = useCallback(async () => {
     setLoading(true);
@@ -184,6 +187,20 @@ export default function PostDetail() {
   const handleSolve = async () => {
     await apiFetch(`/posts/${post.id}/solve/`, { method: 'POST' });
     await loadPost();
+  };
+
+  const handleReport = async () => {
+    const reason = reportReason.trim();
+    if (!reason) return;
+    const ok = await apiFetch(`/posts/${post.id}/flag/`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    if (ok) {
+      setReporting(false);
+      setReportReason('');
+      setReported(true);
+    }
   };
 
   return (
@@ -259,7 +276,46 @@ export default function PostDetail() {
               <i className="bx bx-check-double"></i> Mark as solved
             </button>
           )}
+          {isAuthenticated && !isMine && !reported && (
+            <button
+              className="btn btn-secondary"
+              style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', marginLeft: 'auto' }}
+              onClick={() => setReporting(v => !v)}
+              aria-pressed={reporting}
+            >
+              <i className="bx bx-flag"></i> {reporting ? 'Cancel' : 'Report'}
+            </button>
+          )}
+          {reported && (
+            <span className="badge-tag badge-teal" style={{ marginLeft: 'auto' }}>
+              <i className="bx bx-check-shield"></i> Reported — our review team will take a look
+            </span>
+          )}
         </div>
+
+        {reporting && !reported && (
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1.5px solid var(--color-line)' }}>
+            <label className="text-sm font-semibold" htmlFor="report-reason" style={{ display: 'block', marginBottom: '0.4rem' }}>
+              Why are you reporting this post?
+            </label>
+            <textarea
+              id="report-reason"
+              rows={2}
+              placeholder="Describe the issue — spam, harassment, off-topic, misinformation…"
+              value={reportReason}
+              onChange={e => setReportReason(e.target.value)}
+              style={{ width: '100%', marginBottom: '0.5rem' }}
+            />
+            <button
+              className="btn btn-primary"
+              style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem' }}
+              disabled={!reportReason.trim()}
+              onClick={() => void handleReport()}
+            >
+              <i className="bx bx-flag"></i> Submit report
+            </button>
+          </div>
+        )}
       </article>
 
       <section style={{ marginTop: '1.5rem' }}>

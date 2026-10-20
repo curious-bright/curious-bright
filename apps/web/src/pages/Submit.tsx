@@ -1,32 +1,45 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
+import { useAuth } from '../state/AuthContext';
 
 const ACADEMIC_LEVELS = [
-  { value: 'HIGH_SCHOOL', label: 'High School & Secondary' },
-  { value: 'COLLEGE', label: 'Undergraduate College' },
-  { value: 'GRADUATE', label: 'Graduate & Postgraduate' },
-  { value: 'PROFESSIONAL', label: 'Professional & Scholar' },
+  { value: 'high_school', label: 'High School & Secondary' },
+  { value: 'college', label: 'Undergraduate College' },
+  { value: 'graduate', label: 'Graduate & Postgraduate' },
+  { value: 'professional', label: 'Professional & Scholar' },
 ];
+
+const SUBJECTS = ['research', 'math', 'science', 'programming', 'language', 'general'];
 
 export default function Submit() {
   const navigate = useNavigate();
+  const { isAuthenticated, loading } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [academicLevel, setAcademicLevel] = useState('COLLEGE');
+  const [subject, setSubject] = useState('research');
+  const [academicLevel, setAcademicLevel] = useState('college');
   const [file, setFile] = useState<File | null>(null);
-  
+
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  if (!loading && !isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
-      if (!selected.name.endsWith('.pdf')) {
+      if (!selected.name.toLowerCase().endsWith('.pdf')) {
         setError('Only PDF documents are accepted for shared papers.');
+        return;
+      }
+      if (selected.size > 25 * 1024 * 1024) {
+        setError('PDFs are limited to 25 MB.');
         return;
       }
       setError('');
@@ -44,38 +57,27 @@ export default function Submit() {
     setUploading(true);
     setError('');
 
-    try {
-      // 1. Get presigned upload URL or upload file
-      const formData = new FormData();
-      formData.append('file', file);
+    // Single multipart request: Django stores the PDF on the post itself and
+    // places uploads into the peer review queue (review_status = pending).
+    const formData = new FormData();
+    formData.append('title', title.trim());
+    formData.append('body', description.trim());
+    formData.append('kind', 'resource');
+    formData.append('subject', subject);
+    formData.append('academic_level', academicLevel);
+    formData.append('attachment', file);
 
-      // Upload paper file
-      const uploadRes = await apiFetch('/submissions/upload', {
-        method: 'POST',
-        body: formData,
-      });
+    const created = await apiFetch('/posts/', {
+      method: 'POST',
+      body: formData,
+    });
 
-      const fileUrl = uploadRes.fileUrl || uploadRes.url;
+    setUploading(false);
 
-      // 2. Submit paper metadata to queue
-      await apiFetch('/submissions', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          academicLevel,
-          fileUrl,
-        }),
-      });
+    if (!created) return; // apiFetch already surfaced the error globally
 
-      setSuccess('Your paper was submitted to the community peer review queue!');
-      setTimeout(() => navigate('/browse'), 2000);
-    } catch (err: any) {
-      console.error('Submission error:', err);
-      setError(err.message || 'Could not upload your paper at this time.');
-    } finally {
-      setUploading(false);
-    }
+    setSuccess('Your paper was submitted to the community peer review queue!');
+    setTimeout(() => navigate('/browse'), 2000);
   };
 
   return (
@@ -122,17 +124,32 @@ export default function Submit() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-              Learning Level Target
-            </label>
-            <select value={academicLevel} onChange={e => setAcademicLevel(e.target.value)}>
-              {ACADEMIC_LEVELS.map(level => (
-                <option key={level.value} value={level.value}>
-                  {level.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                Subject Area
+              </label>
+              <select value={subject} onChange={e => setSubject(e.target.value)}>
+                {SUBJECTS.map(s => (
+                  <option key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                Learning Level Target
+              </label>
+              <select value={academicLevel} onChange={e => setAcademicLevel(e.target.value)}>
+                {ACADEMIC_LEVELS.map(level => (
+                  <option key={level.value} value={level.value}>
+                    {level.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

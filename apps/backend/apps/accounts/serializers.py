@@ -45,10 +45,15 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
+    can_moderate = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "profile"]
+        fields = ["id", "username", "email", "profile", "is_moderator", "can_moderate"]
+
+    def get_can_moderate(self, obj):
+        # Without revealing which flag is set (staff vs granted role).
+        return bool(obj.is_moderator or obj.is_staff)
 
 
 class RegisterSerializer(serializers.ModelSerializer):

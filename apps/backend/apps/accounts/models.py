@@ -4,6 +4,10 @@ from django.db import models
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
+    is_moderator = models.BooleanField(
+        default=False,
+        help_text="Grants access to the community review queue and reports.",
+    )
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]

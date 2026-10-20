@@ -1,49 +1,47 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { apiFetch, clearTokens } from '../lib/api';
+import { useAuth } from '../state/AuthContext';
 
 export default function ModeratorLogin() {
   const navigate = useNavigate();
+  const { login, user, loading: authLoading, refreshMe } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Already a moderator? Skip the portal form entirely.
+  useEffect(() => {
+    if (!authLoading && user?.can_moderate) {
+      navigate('/moderate', { replace: true });
+    }
+  }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    try {
-      const data = await apiFetch('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email: email.trim(), password }),
-      });
-
-      if (data?.token) {
-        localStorage.setItem('token', data.token);
-        document.cookie = `token=${data.token}; path=/; max-age=${7 * 24 * 60 * 60}`;
-      }
-      if (data?.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-
-      const role = data?.user?.role;
-      if (role !== 'MODERATOR' && role !== 'ADMIN') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-        setError('Access denied. This portal is for moderators only.');
-        setLoading(false);
-        return;
-      }
-
-      navigate('/moderate');
-    } catch (err: any) {
-      setError(err.message || 'Invalid credentials');
-    } finally {
+    const ok = await login(email.trim(), password);
+    if (!ok) {
+      setError('Invalid credentials. Please check your email/username and password.');
       setLoading(false);
+      return;
     }
+
+    // Fetch a fresh /auth/me/ so the moderator check isn't using stale state.
+    const me = await apiFetch<{ can_moderate: boolean }>('/auth/me/');
+    if (!me?.can_moderate) {
+      clearTokens();
+      localStorage.removeItem('user');
+      await refreshMe();
+      setError('Access denied. This portal is for moderators only.');
+      setLoading(false);
+      return;
+    }
+
+    navigate('/moderate');
   };
 
   return (

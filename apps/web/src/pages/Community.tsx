@@ -1,69 +1,67 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { Link, Navigate } from 'react-router-dom';
+import { apiFetch, resultsOf } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import { CuriousLoading, CuriousEmpty } from '../components/CuriousStates';
+import { useAuth } from '../state/AuthContext';
 
 interface Room {
-  id: string;
+  id: number;
   name: string;
   topic: string;
-  isPrivate: boolean;
-  memberCount?: number;
-  activeCount?: number;
+  member_count: number;
+  created_by?: string | null;
+  created_at: string;
 }
 
 export default function Community() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  
+
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomTopic, setNewRoomTopic] = useState('');
-  const [createError, setCreateError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchRooms = async () => {
+      const data = await apiFetch<{ count: number; results: Room[] }>('/rooms/');
+      if (cancelled) return;
+      setRooms(resultsOf<Room>(data));
+      setLoading(false);
+    };
     fetchRooms();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const fetchRooms = async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch('/rooms');
-      if (Array.isArray(data)) {
-        setRooms(data);
-      }
-    } catch (e) {
-      console.error('Failed to load study rooms', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!authLoading && !isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreateError('');
-    if (!newRoomName.trim()) return;
+    if (!newRoomName.trim() || creating) return;
 
-    try {
-      const created = await apiFetch('/rooms', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: newRoomName.trim(),
-          topic: newRoomTopic.trim() || 'General Study',
-          type: 'GROUP',
-        }),
-      });
+    setCreating(true);
+    const created = await apiFetch<Room>('/rooms/', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: newRoomName.trim(),
+        topic: newRoomTopic.trim() || 'General Study',
+      }),
+    });
+    setCreating(false);
 
-      if (created?.id) {
-        setShowCreateModal(false);
-        setNewRoomName('');
-        setNewRoomTopic('');
-        fetchRooms();
-      }
-    } catch (err: any) {
-      setCreateError(err.message || 'Could not create study room');
+    if (created?.id) {
+      setShowCreateModal(false);
+      setNewRoomName('');
+      setNewRoomTopic('');
+      setRooms(prev => [created, ...prev]);
     }
   };
 
@@ -76,11 +74,11 @@ export default function Community() {
             <HighlighterText color="#00A896">Collaborative Study Rooms</HighlighterText>
           </h2>
           <p className="text-muted text-sm mt-2">
-            Join co-authors and scholars in real-time reading sessions, whiteboards, and video calls.
+            Join co-authors and scholars in shared rooms for live discussion and question threads.
           </p>
         </div>
 
-        <button 
+        <button
           className="btn btn-primary"
           onClick={() => setShowCreateModal(true)}
           style={{ padding: '0.55rem 1.1rem', fontSize: '0.875rem' }}
@@ -91,7 +89,7 @@ export default function Community() {
       </div>
 
       {loading ? (
-        <CuriousLoading message="Fetching active study rooms & co-author sessions..." />
+        <CuriousLoading message="Fetching study rooms & co-author sessions..." />
       ) : rooms.length === 0 ? (
         <CuriousEmpty
           title="No Active Study Rooms Yet"
@@ -109,7 +107,7 @@ export default function Community() {
           {rooms.map(room => (
             <CommentCornerCard
               key={room.id}
-              commentPreview="Peel corner to view active co-authors"
+              commentPreview={`Hosted by ${room.created_by ? `@${room.created_by}` : 'the community'}`}
               className="flex flex-col justify-between"
             >
               <div>
@@ -118,14 +116,14 @@ export default function Community() {
                     {room.topic || 'General Topic'}
                   </span>
                   <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem' }}>
-                    Active Workspace
+                    {room.member_count} member{room.member_count === 1 ? '' : 's'}
                   </span>
                 </div>
 
                 <h3 className="mb-2" style={{ fontSize: '1.15rem' }}>{room.name}</h3>
 
                 <p className="text-muted text-sm mb-4">
-                  Shared study space equipped with real-time text chat, interactive whiteboard, and video call support.
+                  A shared study space with live message chat, an always-visible member list, and join-anytime access.
                 </p>
               </div>
 
@@ -146,7 +144,7 @@ export default function Community() {
 
       {/* Create Room Modal with Boxicons */}
       {showCreateModal && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             inset: 0,
@@ -167,23 +165,14 @@ export default function Community() {
                   <i className="bx bx-conversation" style={{ fontSize: '1.25rem' }}></i>
                   Create Study Room
                 </h3>
-                <button 
-                  className="btn btn-secondary" 
+                <button
+                  className="btn btn-secondary"
                   onClick={() => setShowCreateModal(false)}
                   style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
                 >
                   <i className="bx bx-x" style={{ fontSize: '1.1rem' }}></i>
                 </button>
               </div>
-
-              {createError && (
-                <div className="alert alert-error mb-4">
-                  <span className="flex items-center gap-1">
-                    <i className="bx bx-error-circle" style={{ fontSize: '1rem' }}></i>
-                    {createError}
-                  </span>
-                </div>
-              )}
 
               <form onSubmit={handleCreateRoom} className="flex flex-col gap-4">
                 <div>
@@ -215,9 +204,17 @@ export default function Community() {
                   <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={!newRoomName.trim()}>
-                    <span>Create Room</span>
-                    <i className="bx bx-right-arrow-alt" style={{ fontSize: '1.1rem' }}></i>
+                  <button type="submit" className="btn btn-primary" disabled={!newRoomName.trim() || creating}>
+                    {creating ? (
+                      <span className="flex items-center gap-2">
+                        <i className="bx bx-loader-alt bx-spin"></i> Creating...
+                      </span>
+                    ) : (
+                      <span>
+                        Create Room
+                        <i className="bx bx-right-arrow-alt" style={{ fontSize: '1.1rem', marginLeft: '0.35rem' }}></i>
+                      </span>
+                    )}
                   </button>
                 </div>
               </form>

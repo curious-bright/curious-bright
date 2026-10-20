@@ -1,80 +1,112 @@
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../lib/api';
+import { Link } from 'react-router-dom';
+import { apiFetch, resultsOf } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import { CuriousLoading, CuriousEmpty } from '../components/CuriousStates';
+import { useAuth } from '../state/AuthContext';
 
-interface Submission {
-  id: string;
+interface QueuedPost {
+  id: number;
   title: string;
-  description: string;
-  fileUrl: string;
-  academicLevel?: string;
-  status: string;
-  createdAt: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    schoolName?: string;
-  };
+  body: string;
+  subject: string;
+  kind: string;
+  academic_level: string;
+  attachment_url: string | null;
+  attachment_name: string;
+  author: { id: number; username: string };
+  created_at: string;
 }
 
-interface SafetyLog {
-  id: string;
-  flagType: string;
+interface Report {
+  id: number;
+  reporter: { id: number; username: string };
+  post_id: number;
+  post_title: string;
+  post_author: string;
   reason: string;
-  createdAt: string;
-  user?: { name: string };
-  targetMessage?: { content: string };
+  created_at: string;
 }
 
 export default function Moderate() {
-  const [activeTab, setActiveTab] = useState<'SUBMISSIONS' | 'SAFETY' | 'OVERVIEW'>('SUBMISSIONS');
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [safetyLogs, setSafetyLogs] = useState<SafetyLog[]>([]);
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<'QUEUE' | 'REPORTS' | 'OVERVIEW'>('QUEUE');
+  const [queue, setQueue] = useState<QueuedPost[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState('');
 
+  const canModerate = !!user?.can_moderate;
+
   useEffect(() => {
-    fetchQueue();
-  }, [activeTab]);
-
-  const fetchQueue = async () => {
-    setLoading(true);
-    setActionMessage('');
-    try {
-      if (activeTab === 'SUBMISSIONS') {
-        const data = await apiFetch('/submissions?status=PENDING');
-        setSubmissions(Array.isArray(data) ? data : []);
-      } else if (activeTab === 'SAFETY') {
-        const data = await apiFetch('/moderation/flags');
-        setSafetyLogs(Array.isArray(data) ? data : []);
+    if (authLoading || !isAuthenticated || !canModerate) return;
+    let cancelled = false;
+    const fetchQueue = async () => {
+      setLoading(true);
+      setActionMessage('');
+      if (activeTab === 'QUEUE') {
+        const data = await apiFetch(`/moderation/queue/`);
+        if (!cancelled) setQueue(resultsOf<QueuedPost>(data));
+      } else if (activeTab === 'REPORTS') {
+        const data = await apiFetch(`/moderation/reports/`);
+        if (!cancelled) setReports(resultsOf<Report>(data));
       }
-    } catch (e) {
-      console.warn('Moderation fetch warning:', e);
-    } finally {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
+    };
+    fetchQueue();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, authLoading, isAuthenticated, canModerate]);
+
+  if (authLoading) {
+    return <CuriousLoading message="Checking moderator access..." />;
+  }
+
+  if (!isAuthenticated || !canModerate) {
+    return (
+      <div style={{ maxWidth: '560px', margin: '3rem auto' }}>
+        <CuriousEmpty
+          title="Moderator Access Required"
+          description="The review queue is only available to members of the community review team."
+          flourishText="Peer Review"
+          actionButton={
+            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+              <Link to="/apply-moderator" className="btn btn-primary">
+                Apply to Moderate
+              </Link>
+              <Link to="/mod-login" className="btn btn-secondary">
+                Moderator Sign In
+              </Link>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
+
+  const handleApprove = async (id: number) => {
+    const updated = await apiFetch<QueuedPost>(`/moderation/queue/${id}/approve/`, { method: 'POST' });
+    if (updated) {
+      setActionMessage('Paper approved and published to the community repository');
+      setQueue(prev => prev.filter(p => p.id !== id));
     }
   };
 
-  const handleApproveSubmission = async (id: string) => {
-    try {
-      await apiFetch(`/submissions/${id}/approve`, { method: 'POST' });
-      setActionMessage('Paper approved and published to Open Library');
-      setSubmissions(prev => prev.filter(s => s.id !== id));
-    } catch (e: any) {
-      setActionMessage('Could not approve submission at this time.');
-    }
-  };
-
-  const handleRejectSubmission = async (id: string) => {
-    try {
-      await apiFetch(`/submissions/${id}/reject`, { method: 'POST' });
+  const handleReject = async (id: number) => {
+    const updated = await apiFetch<QueuedPost>(`/moderation/queue/${id}/reject/`, { method: 'POST' });
+    if (updated) {
       setActionMessage('Paper returned to author with feedback');
-      setSubmissions(prev => prev.filter(s => s.id !== id));
-    } catch (e: any) {
-      setActionMessage('Could not reject submission at this time.');
+      setQueue(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleResolveReport = async (id: number) => {
+    const resolved = await apiFetch<Report>(`/moderation/reports/${id}/resolve/`, { method: 'POST' });
+    if (resolved) {
+      setActionMessage('Report marked resolved');
+      setReports(prev => prev.filter(r => r.id !== id));
     }
   };
 
@@ -87,27 +119,27 @@ export default function Moderate() {
             <HighlighterText color="#00A896">Community Peer Review</HighlighterText>
           </h2>
           <p className="text-muted text-sm mt-2">
-            Review community-submitted papers, ensure open-access standards, and maintain safety across study rooms.
+            Review community-submitted papers, resolve member reports, and maintain community standards.
           </p>
         </div>
 
         {/* Tab Switcher with Boxicons */}
         <div className="flex gap-2" style={{ background: 'var(--color-paper-card)', padding: '0.3rem', borderRadius: '4px 0px 4px 4px', border: '1.5px solid var(--color-line)' }}>
           <button
-            className={`btn ${activeTab === 'SUBMISSIONS' ? 'btn-primary' : 'btn-secondary'}`}
+            className={`btn ${activeTab === 'QUEUE' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ padding: '0.45rem 1rem', fontSize: '0.8125rem' }}
-            onClick={() => setActiveTab('SUBMISSIONS')}
+            onClick={() => setActiveTab('QUEUE')}
           >
             <i className="bx bx-file" style={{ fontSize: '1rem' }}></i>
-            <span>Pending Papers ({submissions.length})</span>
+            <span>Review Queue {activeTab === 'QUEUE' && queue.length > 0 ? `(${queue.length})` : ''}</span>
           </button>
           <button
-            className={`btn ${activeTab === 'SAFETY' ? 'btn-primary' : 'btn-secondary'}`}
+            className={`btn ${activeTab === 'REPORTS' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ padding: '0.45rem 1rem', fontSize: '0.8125rem' }}
-            onClick={() => setActiveTab('SAFETY')}
+            onClick={() => setActiveTab('REPORTS')}
           >
             <i className="bx bx-shield" style={{ fontSize: '1rem' }}></i>
-            <span>Safety Concerns ({safetyLogs.length})</span>
+            <span>Member Reports {activeTab === 'REPORTS' && reports.length > 0 ? `(${reports.length})` : ''}</span>
           </button>
           <button
             className={`btn ${activeTab === 'OVERVIEW' ? 'btn-primary' : 'btn-secondary'}`}
@@ -131,8 +163,8 @@ export default function Moderate() {
 
       {loading ? (
         <CuriousLoading message="Fetching peer review queue..." />
-      ) : activeTab === 'SUBMISSIONS' ? (
-        submissions.length === 0 ? (
+      ) : activeTab === 'QUEUE' ? (
+        queue.length === 0 ? (
           <CuriousEmpty
             title="Review Queue is Clean"
             description="There are currently no pending paper submissions waiting for review."
@@ -140,48 +172,61 @@ export default function Moderate() {
           />
         ) : (
           <div className="flex flex-col gap-4">
-            {submissions.map(sub => (
-              <CommentCornerCard key={sub.id} commentPreview="Reviewer checklist: Verify open license & plain abstract">
+            {queue.map(post => (
+              <CommentCornerCard key={post.id} commentPreview="Reviewer checklist: Verify open license & plain abstract">
                 <div className="flex justify-between items-start" style={{ flexWrap: 'wrap', gap: '1rem' }}>
                   <div style={{ flex: 1, minWidth: '280px' }}>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2" style={{ flexWrap: 'wrap' }}>
                       <span className="badge-tag badge-mustard">
-                        {sub.academicLevel ? sub.academicLevel.replace('_', ' ') : 'General Academic'}
+                        {post.academic_level.replace('_', ' ').replace(/^./, c => c.toUpperCase())}
                       </span>
                       <span className="badge-tag badge-teal">
-                        Author: {sub.user?.name} {sub.user?.schoolName ? `(${sub.user.schoolName})` : ''}
+                        Author: @{post.author.username}
+                      </span>
+                      <span className="badge-tag badge-coral">
+                        {post.subject.replace(/^./, c => c.toUpperCase())}
                       </span>
                     </div>
 
-                    <h3 className="mb-2" style={{ fontSize: '1.2rem' }}>{sub.title}</h3>
-                    <p className="text-muted text-sm mb-4">{sub.description}</p>
+                    <h3 className="mb-2" style={{ fontSize: '1.2rem' }}>{post.title}</h3>
+                    <p className="text-muted text-sm mb-4">{post.body}</p>
 
                     <div className="flex items-center gap-3">
-                      <a 
-                        href={sub.fileUrl} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="btn btn-secondary" 
+                      {post.attachment_url && (
+                        <a
+                          href={post.attachment_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
+                        >
+                          <i className="bx bx-file-pdf" style={{ fontSize: '0.95rem' }}></i>
+                          <span>Inspect PDF Document</span>
+                        </a>
+                      )}
+                      <Link
+                        to={`/post/${post.id}`}
+                        className="btn btn-secondary"
                         style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
                       >
-                        <i className="bx bx-file-pdf" style={{ fontSize: '0.95rem' }}></i>
-                        <span>Inspect PDF Document</span>
-                      </a>
+                        <i className="bx bx-show" style={{ fontSize: '0.95rem' }}></i>
+                        <span>Open in Context</span>
+                      </Link>
                     </div>
                   </div>
 
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleRejectSubmission(sub.id)}
-                      className="btn btn-secondary" 
+                    <button
+                      onClick={() => handleReject(post.id)}
+                      className="btn btn-secondary"
                       style={{ padding: '0.5rem 0.95rem', fontSize: '0.8125rem', borderColor: 'var(--color-coral)' }}
                     >
                       <i className="bx bx-x" style={{ fontSize: '1.1rem', color: 'var(--color-coral)' }}></i>
                       <span>Return to Author</span>
                     </button>
-                    <button 
-                      onClick={() => handleApproveSubmission(sub.id)}
-                      className="btn btn-primary" 
+                    <button
+                      onClick={() => handleApprove(post.id)}
+                      className="btn btn-primary"
                       style={{ padding: '0.5rem 0.95rem', fontSize: '0.8125rem' }}
                     >
                       <i className="bx bx-check" style={{ fontSize: '1.1rem' }}></i>
@@ -193,29 +238,57 @@ export default function Moderate() {
             ))}
           </div>
         )
-      ) : activeTab === 'SAFETY' ? (
-        safetyLogs.length === 0 ? (
+      ) : activeTab === 'REPORTS' ? (
+        reports.length === 0 ? (
           <CuriousEmpty
-            title="No Safety Concerns Flagged"
+            title="No Open Member Reports"
             description="All study rooms and co-author discussions are running safely."
             flourishText="Safety & Integrity"
           />
         ) : (
           <div className="flex flex-col gap-4">
-            {safetyLogs.map(log => (
-              <CommentCornerCard key={log.id}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="badge-tag badge-coral">{log.flagType || 'Content Flag'}</span>
+            {reports.map(report => (
+              <CommentCornerCard key={report.id}>
+                <div className="flex justify-between items-center mb-2" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span className="badge-tag badge-coral">
+                    <i className="bx bx-flag" style={{ fontSize: '0.85rem' }}></i>{' '}
+                    Reported by @{report.reporter.username}
+                  </span>
                   <span className="text-xs text-muted">
-                    {new Date(log.createdAt).toLocaleDateString()}
+                    {new Date(report.created_at).toLocaleDateString()}
                   </span>
                 </div>
-                <p className="font-semibold text-sm mb-1">{log.reason}</p>
-                {log.targetMessage && (
-                  <div style={{ padding: '0.5rem 0.75rem', background: 'var(--color-paper)', border: '1.5px solid var(--color-line)', borderRadius: '4px 0px 4px 4px', fontSize: '0.8125rem' }}>
-                    "{log.targetMessage.content}"
-                  </div>
-                )}
+                <p className="font-semibold text-sm mb-1">{report.reason}</p>
+                <div
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    background: 'var(--color-paper)',
+                    border: '1.5px solid var(--color-line)',
+                    borderRadius: '4px 0px 4px 4px',
+                    fontSize: '0.8125rem',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <strong>{report.post_title}</strong> by @{report.post_author}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Link
+                    to={`/post/${report.post_id}`}
+                    className="btn btn-secondary"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem' }}
+                  >
+                    <i className="bx bx-show" style={{ fontSize: '0.95rem' }}></i>
+                    <span>Inspect Post</span>
+                  </Link>
+                  <button
+                    onClick={() => handleResolveReport(report.id)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem' }}
+                  >
+                    <i className="bx bx-check-shield" style={{ fontSize: '0.95rem' }}></i>
+                    <span>Mark Resolved</span>
+                  </button>
+                </div>
               </CommentCornerCard>
             ))}
           </div>

@@ -60,6 +60,29 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
   `POST/DELETE /api/posts/<id>/like/`, `POST/DELETE /api/comments/<id>/helpful/`,
   `POST /api/posts/<id>/accept-answer/`, `POST /api/posts/<id>/solve/`,
   `GET /api/notifications/?unread=true`, `POST /api/notifications/read/`
+  - Post filters: `subject`, `level`, `kind`, `search`, `author`, `status`
+    (`published|pending|rejected`), `attachment` (`only` = papers with a PDF,
+    `none` = plain notes). All list endpoints are paginated:
+    `{count, next, previous, results}` (`page_size=20`).
+  - Papers: `POST /api/posts/` accepts multipart `attachment` (PDF, ≤25 MB) →
+    saved as `pending` (needs moderator approval) with `attachment_url` in the
+    response; posts without an attachment publish immediately.
+- Moderation: `POST /api/posts/<id>/flag/` (body `{reason}`, one report per
+  user per post), `GET /api/moderation/queue/` (pending posts),
+  `POST /api/moderation/queue/<id>/approve|reject/`,
+  `GET /api/moderation/reports/` (unresolved),
+  `POST /api/moderation/reports/<id>/resolve/`,
+  `GET/POST /api/moderator-applications/` (motivation ≥80 chars, non-empty
+  `subjects`), `GET /api/moderator-applications/me/` (404 = none yet),
+  `POST /api/moderator-applications/<id>/approve|decline/` (staff only;
+  approve grants `is_moderator`). Queue/reports require `is_moderator` or
+  staff; `/api/auth/me/` exposes `is_moderator` and `can_moderate`.
+- Rooms: `GET/POST /api/rooms/`, `GET /api/rooms/<id>/`, `POST/DELETE
+  /api/rooms/<id>/join/`, `GET /api/rooms/<id>/members/`,
+  `GET/POST /api/rooms/<id>/messages/` (`?after=<id>` for incremental
+  polling; first load returns the latest 100 in chronological order).
+- Search: `GET /api/search/?q=` → `{posts, rooms, users}` (max 10 each,
+  public; empty query returns empty lists).
 - Gamification: badges appear on profile responses; awarded automatically
   (`award_badge`) — Teacher (helpful/accepted comment), Solver (accepted answer
   / question solved), Collaborator (co-authored revision)
@@ -102,6 +125,22 @@ alert if refresh fails.
   `manage.py changepassword`).
 - **SQLite fallback**: convenient locally, but production must set
   `DATABASE_URL`; `start.sh` runs migrations + `ensure_admin` before gunicorn.
-- **Legacy pages**: pre-existing pages (`/browse`, `/rooms`, …) still call
-  retired Express endpoints; `apiFetch` returns `null` and they render their
-  empty states instead of crashing.
+- **Attachment review gate**: posts with a PDF are created as `pending` and are
+  hidden from everyone except their author and moderators (`404` for others)
+  until approved. Rejecting keeps them hidden permanently (the author is
+  notified either way).
+- **Reports**: a user cannot report their own post or report the same post
+  twice (400 `validation_error`); resolving an already-resolved report is
+  idempotent. Reports surface post title/author so the queue renders without
+  extra fetches.
+- **Moderator applications**: one application per user (`400` on duplicates);
+  `/me/` returns `404 not_found` when there is none (the UI treats that as
+  "not applied yet"); approving sets `is_moderator` and unlocks the queue.
+- **Room polling**: clients poll `?after=<last id>` every few seconds and
+  dedupe by message id; the first fetch returns the latest 100 messages in
+  chronological order, so reconnects never replay history.
+- **Search**: public, case-insensitive `icontains` across post titles/bodies,
+  room names/descriptions, and usernames; results are capped per section.
+- **HTML caching / dev media**: uploaded PDFs are served from `/media/` only
+  when `DEBUG=true`; production should serve them via the reverse proxy or
+  object storage.

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../state/AuthContext';
+import { CuriousLoading } from '../components/CuriousStates';
 
 const SUBJECT_OPTIONS = [
   'Mathematics', 'Physics', 'Chemistry', 'Biology',
@@ -10,25 +12,26 @@ const SUBJECT_OPTIONS = [
   'Arts & Humanities', 'Political Science', 'Environmental Science',
 ];
 
-type AppStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+type AppStatus = 'pending' | 'approved' | 'rejected';
 
 interface ExistingApp {
   status: AppStatus;
   motivation: string;
   experience: string;
   subjects: string[];
-  createdAt: string;
-  reviewNote?: string;
+  created_at: string;
+  review_note?: string | null;
 }
 
 const statusConfig: Record<AppStatus, { label: string; color: string; bg: string; border: string; icon: string }> = {
-  PENDING:  { label: 'Under Review', icon: '⏳', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)' },
-  APPROVED: { label: 'Approved!',    icon: '🎉', color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' },
-  REJECTED: { label: 'Not Approved', icon: '❌', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)'  },
+  pending:  { label: 'Under Review', icon: '⏳', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)' },
+  approved: { label: 'Approved!',    icon: '🎉', color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' },
+  rejected: { label: 'Not Approved', icon: '❌', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)'  },
 };
 
 export default function ApplyModerator() {
   const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [motivation, setMotivation] = useState('');
   const [experience, setExperience] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
@@ -38,17 +41,25 @@ export default function ApplyModerator() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const user = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
-  })();
-
   useEffect(() => {
-    if (!user) { navigate('/login'); return; }
-    apiFetch('/moderator-applications/me')
-      .then((data: any) => setExistingApp(data))
-      .catch(() => {}) // 404 = no application yet, that's fine
-      .finally(() => setCheckingStatus(false));
-  }, []);
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    let cancelled = false;
+    // apiFetch returns null on 404 — meaning no application yet.
+    apiFetch<ExistingApp>('/moderator-applications/me/')
+      .then(data => {
+        if (!cancelled) setExistingApp(data);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingStatus(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, navigate]);
 
   const toggleSubject = (subject: string) => {
     setSelectedSubjects(prev =>
@@ -70,40 +81,34 @@ export default function ApplyModerator() {
     }
 
     setLoading(true);
-    try {
-      await apiFetch('/moderator-applications', {
-        method: 'POST',
-        body: JSON.stringify({ motivation: motivation.trim(), experience: experience.trim(), subjects: selectedSubjects }),
-      });
+    const created = await apiFetch('/moderator-applications/', {
+      method: 'POST',
+      body: JSON.stringify({ motivation: motivation.trim(), experience: experience.trim(), subjects: selectedSubjects }),
+    });
+    if (created) {
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to submit application. Please try again.');
-    } finally {
-      setLoading(false);
+    } else {
+      setError('Failed to submit application. Please try again.');
     }
+    setLoading(false);
   };
 
-  if (checkingStatus) {
-    return (
-      <div className="loading-container">
-        <div className="spinner" />
-        <span>Checking application status...</span>
-      </div>
-    );
+  if (checkingStatus || authLoading) {
+    return <CuriousLoading message="Checking application status..." />;
   }
 
   // Success state
   if (success) {
     return (
-      <div style={{ maxWidth: 540, margin: '3rem auto', textAlign: 'center' }} className="animate-fade-in">
-        <div className="glass-card" style={{ padding: '3rem 2rem' }}>
+      <div style={{ maxWidth: 540, margin: '3rem auto', textAlign: 'center' }}>
+        <div className="comment-corner-card" style={{ padding: '3rem 2rem' }}>
           <div style={{ fontSize: '3.5rem', marginBottom: '1.25rem' }}>🎉</div>
           <h2 style={{ marginBottom: '0.75rem' }}>Application Submitted!</h2>
-          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '2rem' }}>
+          <p className="text-muted" style={{ lineHeight: 1.7, marginBottom: '2rem' }}>
             Thank you for applying to become a CuriousBright moderator. Our admin team will review
             your application and you'll receive a notification with the decision.
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <div className="flex justify-center gap-2" style={{ flexWrap: 'wrap' }}>
             <Link to="/browse" className="btn btn-primary">Browse Library</Link>
             <Link to="/community" className="btn btn-secondary">Study Rooms</Link>
           </div>
@@ -114,24 +119,24 @@ export default function ApplyModerator() {
 
   // Existing application status view
   if (existingApp) {
-    const cfg = statusConfig[existingApp.status];
+    const cfg = statusConfig[existingApp.status] ?? statusConfig.pending;
     return (
-      <div style={{ maxWidth: 620, margin: '2rem auto' }} className="animate-fade-in">
+      <div style={{ maxWidth: 620, margin: '2rem auto' }}>
         <div style={{ marginBottom: '1.5rem' }}>
-          <Link to="/browse" style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>← Back to Library</Link>
+          <Link to="/browse" className="text-muted" style={{ fontSize: '0.875rem' }}>← Back to Library</Link>
         </div>
 
         <h1 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Moderator Application</h1>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>
+        <p className="text-muted" style={{ marginBottom: '2rem', fontSize: '0.9rem' }}>
           You have already submitted an application.
         </p>
 
         {/* Status card */}
         <div style={{
           padding: '1.5rem',
-          borderRadius: 'var(--radius-lg)',
           background: cfg.bg,
-          border: `1px solid ${cfg.border}`,
+          border: `1.5px solid ${cfg.border}`,
+          borderRadius: '4px 0px 4px 4px',
           marginBottom: '1.5rem',
           display: 'flex', alignItems: 'center', gap: '1rem',
         }}>
@@ -140,33 +145,33 @@ export default function ApplyModerator() {
             <div style={{ fontWeight: 700, fontSize: '1rem', color: cfg.color, marginBottom: '0.2rem' }}>
               {cfg.label}
             </div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              Submitted {new Date(existingApp.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            <div className="text-muted" style={{ fontSize: '0.8125rem' }}>
+              Submitted {new Date(existingApp.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </div>
           </div>
         </div>
 
-        {existingApp.reviewNote && (
+        {existingApp.review_note && (
           <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
-            <span>📝 Admin note: {existingApp.reviewNote}</span>
+            <span>📝 Admin note: {existingApp.review_note}</span>
           </div>
         )}
 
-        <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div className="comment-corner-card" style={{ marginBottom: '1.25rem' }}>
           <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Your Motivation</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.7 }}>{existingApp.motivation}</p>
+          <p className="text-muted" style={{ fontSize: '0.9rem', lineHeight: 1.7 }}>{existingApp.motivation}</p>
         </div>
 
-        <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div className="comment-corner-card" style={{ marginBottom: '1.25rem' }}>
           <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Experience & Background</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.7 }}>{existingApp.experience}</p>
+          <p className="text-muted" style={{ fontSize: '0.9rem', lineHeight: 1.7 }}>{existingApp.experience}</p>
         </div>
 
-        <div className="glass-card">
+        <div className="comment-corner-card">
           <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Subject Areas</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             {existingApp.subjects.map(s => (
-              <span key={s} className="badge badge-level">{s}</span>
+              <span key={s} className="badge-tag badge-teal">{s}</span>
             ))}
           </div>
         </div>
@@ -176,26 +181,25 @@ export default function ApplyModerator() {
 
   // Application form
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', paddingBottom: '3rem' }} className="animate-fade-in">
+    <div style={{ maxWidth: 680, margin: '0 auto', paddingBottom: '3rem' }}>
       <div style={{ marginBottom: '1.5rem' }}>
-        <Link to="/browse" style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>← Back to Library</Link>
+        <Link to="/browse" className="text-muted" style={{ fontSize: '0.875rem' }}>← Back to Library</Link>
       </div>
 
       {/* Header */}
       <div style={{ marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+        <div className="flex items-center gap-3" style={{ marginBottom: '0.75rem' }}>
           <div style={{
-            width: 52, height: 52, borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))',
-            border: '1px solid rgba(99,102,241,0.3)',
+            width: 52, height: 52, borderRadius: '4px 0px 4px 4px',
+            background: 'rgba(0,168,150,0.12)',
+            border: '1.5px solid var(--color-teal)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
-            boxShadow: '0 4px 16px var(--accent-glow)',
           }}>
-            🛡️
+            <i className="bx bx-shield-quarter" style={{ color: 'var(--color-teal)' }}></i>
           </div>
           <div>
             <h1 style={{ fontSize: '1.75rem', marginBottom: '0.2rem' }}>Apply as Moderator</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            <p className="text-muted" style={{ fontSize: '0.875rem' }}>
               Help keep CuriousBright a high-quality academic space
             </p>
           </div>
@@ -203,20 +207,20 @@ export default function ApplyModerator() {
       </div>
 
       {/* What moderators do */}
-      <div className="glass-card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--text-secondary)' }}>
+      <div className="comment-corner-card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
+        <h3 className="text-muted" style={{ marginBottom: '1rem', fontSize: '1rem' }}>
           What moderators do
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
           {[
-            { icon: '📋', text: 'Review submitted papers for quality' },
-            { icon: '✅', text: 'Approve or reject submissions' },
-            { icon: '🚩', text: 'Handle community reports' },
-            { icon: '🤝', text: 'Uphold platform standards' },
+            { icon: 'bx-file', text: 'Review submitted papers for quality' },
+            { icon: 'bx-check-circle', text: 'Approve or reject submissions' },
+            { icon: 'bx-flag', text: 'Handle community reports' },
+            { icon: 'bx-handshake', text: 'Uphold platform standards' },
           ].map(item => (
-            <div key={item.text} style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{item.icon}</span>
-              <span style={{ fontSize: '0.8375rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.text}</span>
+            <div key={item.text} className="flex gap-2 items-start">
+              <i className={`bx ${item.icon}`} style={{ fontSize: '1.1rem', flexShrink: 0, color: 'var(--color-teal)' }}></i>
+              <span className="text-muted" style={{ fontSize: '0.8375rem', lineHeight: 1.5 }}>{item.text}</span>
             </div>
           ))}
         </div>
@@ -232,12 +236,12 @@ export default function ApplyModerator() {
         )}
 
         {/* Motivation */}
-        <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div className="comment-corner-card" style={{ marginBottom: '1.25rem' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label htmlFor="motivation">
               Why do you want to be a moderator? *
             </label>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.6rem', marginTop: '0.2rem' }}>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.6rem', marginTop: '0.2rem' }}>
               Tell us your motivation and what makes you a good fit for this role.
             </p>
             <textarea
@@ -249,19 +253,19 @@ export default function ApplyModerator() {
               required
               minLength={80}
             />
-            <div style={{ textAlign: 'right', fontSize: '0.75rem', color: motivation.length < 80 ? 'var(--text-muted)' : 'var(--success)', marginTop: '0.3rem' }}>
+            <div style={{ textAlign: 'right', fontSize: '0.75rem', color: motivation.length < 80 ? 'var(--color-ink-muted, #888)' : 'var(--color-teal)', marginTop: '0.3rem' }}>
               {motivation.length}/80 min chars
             </div>
           </div>
         </div>
 
         {/* Experience */}
-        <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div className="comment-corner-card" style={{ marginBottom: '1.25rem' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label htmlFor="experience">
               Academic background & relevant experience
             </label>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.6rem', marginTop: '0.2rem' }}>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.6rem', marginTop: '0.2rem' }}>
               Describe your academic background, any reviewing or editing experience, or relevant expertise.
             </p>
             <textarea
@@ -275,14 +279,14 @@ export default function ApplyModerator() {
         </div>
 
         {/* Subjects */}
-        <div className="glass-card" style={{ marginBottom: '2rem' }}>
+        <div className="comment-corner-card" style={{ marginBottom: '2rem' }}>
           <label style={{ display: 'block', marginBottom: '0.4rem' }}>
             Subject areas you can evaluate *
           </label>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+          <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>
             Select all areas where you have sufficient knowledge to review academic content.
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             {SUBJECT_OPTIONS.map(subject => {
               const selected = selectedSubjects.includes(subject);
               return (
@@ -291,17 +295,8 @@ export default function ApplyModerator() {
                   type="button"
                   id={`subject-${subject.replace(/\s+/g, '-').toLowerCase()}`}
                   onClick={() => toggleSubject(subject)}
-                  style={{
-                    padding: '0.4rem 0.9rem',
-                    borderRadius: 'var(--radius-full)',
-                    border: selected ? '1px solid rgba(99,102,241,0.6)' : '1px solid var(--glass-border)',
-                    background: selected ? 'rgba(99,102,241,0.15)' : 'transparent',
-                    color: selected ? '#a5b4fc' : 'var(--text-secondary)',
-                    fontSize: '0.8125rem',
-                    fontWeight: selected ? 600 : 400,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={selected ? 'badge-tag badge-teal' : 'badge-tag'}
+                  style={{ cursor: 'pointer' }}
                 >
                   {selected && '✓ '}{subject}
                 </button>
@@ -309,7 +304,7 @@ export default function ApplyModerator() {
             })}
           </div>
           {selectedSubjects.length > 0 && (
-            <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--accent)' }}>
+            <p className="text-muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
               {selectedSubjects.length} subject{selectedSubjects.length !== 1 ? 's' : ''} selected
             </p>
           )}
@@ -329,7 +324,7 @@ export default function ApplyModerator() {
           )}
         </button>
 
-        <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        <p className="text-muted text-center" style={{ marginTop: '1rem', fontSize: '0.8rem' }}>
           Applications are reviewed by our admin team within 3–5 business days.
         </p>
       </form>
