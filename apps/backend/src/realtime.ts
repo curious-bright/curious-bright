@@ -23,15 +23,25 @@ export function attachRealtimeServer(server: http.Server) {
     },
   });
 
+  let isRedisConnected = false;
   const pubClient = createClient({ url: REDIS_URL });
   const subClient = pubClient.duplicate();
 
+  pubClient.on('error', (err) => {
+    isRedisConnected = false;
+  });
+  subClient.on('error', (err) => {
+    isRedisConnected = false;
+  });
+
   Promise.all([pubClient.connect(), subClient.connect()])
     .then(() => {
+      isRedisConnected = true;
       io.adapter(createAdapter(pubClient, subClient));
       console.log('[Realtime] Redis adapter connected');
     })
     .catch((err) => {
+      isRedisConnected = false;
       console.warn('[Realtime] Redis unavailable, using in-memory adapter:', err.message);
     });
 
@@ -88,17 +98,21 @@ export function attachRealtimeServer(server: http.Server) {
 
     socket.on(RealtimeEvents.MESSAGE_SEND, async (payload) => {
       try {
-        try {
-          const rateLimitKey = `rate_limit:msg:${user.id}`;
-          const requests = await pubClient.incr(rateLimitKey);
-          if (requests === 1) {
-            await pubClient.expire(rateLimitKey, 10);
+        if (isRedisConnected) {
+          try {
+            const rateLimitKey = `rate_limit:msg:${user.id}`;
+            const requests = await pubClient.incr(rateLimitKey);
+            if (requests === 1) {
+              await pubClient.expire(rateLimitKey, 10);
+            }
+            if (requests > 5) {
+              socket.emit('error', { message: 'Rate limit exceeded. Please slow down.' });
+              return;
+            }
+          } catch (e) {
+            // If redis operation fails mid-flight, proceed gracefully
           }
-          if (requests > 5) {
-            socket.emit('error', { message: 'Rate limit exceeded. Please slow down.' });
-            return;
-          }
-        } catch (e) {}
+        }
 
         const message = await prisma.message.create({
           data: {
