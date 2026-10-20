@@ -18,7 +18,8 @@ Curious Bright is architected as a high-performance TypeScript monorepo managed 
 ```text
 curious-bright/
 ├── apps/
-│   ├── backend/             # Express.js REST API & Business Logic
+│   ├── backend/             # Django REST API (Python) — see apps/backend/README.md
+│   ├── landing-page/        # Marketing site (React + Vite + Tailwind)
 │   ├── mobile/              # React Native + Expo Mobile Application
 │   ├── realtime-gateway/    # Socket.io & Redis State Synchronization
 │   ├── signaling-service/   # WebRTC Signaling Service
@@ -37,8 +38,8 @@ curious-bright/
 ## Tech Stack & Infrastructure
 
 - **Monorepo Build Tooling:** [Turborepo](https://turbo.build/) & [PNPM Workspaces](https://pnpm.io/)
-- **Backend API:** Express.js REST API (TypeScript)
-- **Database & ORM:** PostgreSQL database with [Prisma ORM](https://www.prisma.io/)
+- **Backend API:** Django 5.2 + Django REST Framework + SimpleJWT (`apps/backend`)
+- **Database & ORM:** PostgreSQL with Django Migrations (SQLite fallback for local dev)
 - **Web Application:** React 18 & Vite
 - **Mobile Application:** React Native with Expo
 - **Real-Time Gateway:** Socket.io paired with Redis for pub/sub messaging and state sync
@@ -50,11 +51,14 @@ curious-bright/
 
 ## Key Features
 
+- **Community Knowledge Feed:** Posts, threaded comments, LaTeX equations, likes, “this helped me”, follows, mentions and notifications — a knowledge-sharing community for students, teachers and researchers (not math-only).
+- **Gamification Badges:** Automatic `Teacher`, `Solver` and `Collaborator` badges awarded on the platform’s core actions, shown on profiles.
+- **Research Collaboration:** Invite co-authors to research documents, edit live with revision history; editing co-authors earn the Collaborator badge.
+- **Centralized Error Handling:** Every API error returns `{code, message, details}`; the web client surfaces it through a single global alert and one API wrapper (auto token refresh, no alert storms).
 - **Open Academic Publishing & Peer Review:** Publish academic articles, research papers, and preprints across various disciplines with built-in community peer-review tools.
 - **Real-Time Interactive Whiteboard:** Collaborative canvas using CRDTs (`Yjs` + `whiteboard-engine`) enabling low-latency concurrent drawing and document annotation.
 - **High-Definition Video Conferencing:** Integrated LiveKit WebRTC conferencing for live research meetings, virtual classrooms, and study groups.
-- **Cross-Platform Access:** Responsive web portal and mobile app (Expo) ensuring seamless participation anywhere.
-- **Event-Driven Messaging & State Sync:** High-performance real-time gateway utilizing Socket.io and Redis.
+- **Cross-Platform Access:** Responsive web portal, landing page and mobile app (Expo) ensuring seamless participation anywhere.
 
 ---
 
@@ -63,10 +67,11 @@ curious-bright/
 ### Prerequisites
 - Node.js (v18+)
 - `pnpm` (`npm i -g pnpm`)
+- Python 3.12+
 - Docker & Docker Compose
 
 ### 1. Start Infrastructure Dependencies
-Launch PostgreSQL, Redis, LiveKit, and MinIO storage services:
+Launch PostgreSQL (and other services used by the legacy realtime stack):
 ```bash
 docker compose up -d
 ```
@@ -76,17 +81,26 @@ docker compose up -d
 pnpm install
 ```
 
-### 3. Database Migration & Generation
-Generate Prisma Client and apply database migrations:
+### 3. Backend: Migrate & Bootstrap Admin
 ```bash
-pnpm --filter database run build
+cd apps/backend
+python -m venv venv && venv/bin/pip install -r requirements.txt
+ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=<strong-password> \
+  venv/bin/python manage.py migrate
+ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=<strong-password> \
+  venv/bin/python manage.py ensure_admin
 ```
+With no `DATABASE_URL` the backend uses local SQLite. Full environment variable
+list, API endpoints, error contract and edge-case notes: **[apps/backend/README.md](apps/backend/README.md)**
+(`.env.example` alongside it).
 
 ### 4. Launch Development Workspace
-Run all apps and services in parallel using Turborepo:
+Run all apps in parallel using Turborepo:
 ```bash
 pnpm run dev
 ```
+Backend-only commands: `pnpm run backend:migrate`, `pnpm run backend:admin`,
+`pnpm run backend:dev`.
 
 ---
 

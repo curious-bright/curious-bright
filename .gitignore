@@ -31,3 +31,16 @@ miniodata/
 # Misc
 *.log
 .commandcode/
+
+# Python / Django backend (apps/backend)
+__pycache__/
+*.py[cod]
+*.sqlite3
+.venv/
+venv/
+staticfiles/
+media/
+
+# Local credentials / scratch files
+cookies.txt
+

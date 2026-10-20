@@ -1,46 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { useAuth } from '../state/AuthContext';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import iconMark from '../assets/icon-mark.svg';
 
-
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const { login } = useAuth();
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
+  // Errors surface through the global alert (lib/api -> errorBus) — no local try/catch.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) return;
-
+    if (!identifier.trim() || !password) return;
     setLoading(true);
-    setError('');
-
-    try {
-      const data = await apiFetch('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (data?.token) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
-        document.cookie = `token=${data.token}; path=/; max-age=604800;`;
-        navigate('/browse');
-      } else {
-        setError('Invalid sign-in response');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Sign in failed. Check your email and password.');
-    } finally {
-      setLoading(false);
-    }
+    const ok = await login(identifier.trim(), password);
+    setLoading(false);
+    if (ok) navigate('/feed');
   };
 
   return (
@@ -55,31 +34,23 @@ export default function Login() {
           <HighlighterText color="#00A896">Welcome Back</HighlighterText>
         </h2>
         <p className="text-muted text-sm mt-2">
-          Sign in to access your shared learning notebook & study rooms.
+          Sign in to teach, learn and collaborate with the community.
         </p>
       </div>
 
-      <CommentCornerCard commentPreview="Secure single session co-author login">
-        {error && (
-          <div className="alert alert-error mb-4">
-            <span className="flex items-center gap-1.5">
-              <i className="bx bx-error-circle" style={{ fontSize: '1.1rem' }}></i>
-              {error}
-            </span>
-          </div>
-        )}
-
+      <CommentCornerCard commentPreview="Secure JWT sign-in with refresh">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-              Academic Email Address
+              Username or Email
             </label>
             <input
-              type="email"
-              placeholder="e.g., alex@university.edu"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              type="text"
+              placeholder="e.g. alex or alex@university.edu"
+              value={identifier}
+              onChange={e => setIdentifier(e.target.value)}
               required
+              autoComplete="username"
             />
           </div>
 
@@ -93,13 +64,14 @@ export default function Login() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
             />
           </div>
 
           <button
             type="submit"
             className="btn btn-primary w-full mt-2"
-            disabled={loading || !email.trim() || !password}
+            disabled={loading || !identifier.trim() || !password}
             style={{ padding: '0.65rem', fontSize: '0.875rem' }}
           >
             {loading ? (
@@ -117,9 +89,9 @@ export default function Login() {
         </form>
 
         <div className="text-center mt-4 pt-3" style={{ borderTop: '1.5px solid var(--color-line)', fontSize: '0.8125rem' }}>
-          <span className="text-muted">Don't have an account yet? </span>
+          <span className="text-muted">New here? </span>
           <Link to="/register" style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
-            Join as co-author
+            Create an account
           </Link>
         </div>
       </CommentCornerCard>

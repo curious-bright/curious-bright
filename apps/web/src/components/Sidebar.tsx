@@ -1,68 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
 import websiteLogo from '../assets/website-logo.svg';
-
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  schoolName?: string;
-}
+import { useAuth } from '../state/AuthContext';
+import { useNotifications } from '../state/NotificationContext';
 
 export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; closeSidebar?: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const getToken = () => {
-    return localStorage.getItem('token') || 
-      document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-  };
-
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getToken());
-
-  useEffect(() => {
-    const token = getToken();
-    setIsAuthenticated(!!token);
-
-    if (token && !user) {
-      apiFetch('/auth/me')
-        .then((userData: any) => {
-          if (userData?.id) {
-            setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
-          }
-        })
-        .catch(() => {
-          setIsAuthenticated(false);
-          setUser(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-        });
-    }
-
-    if (closeSidebar) closeSidebar();
-  }, [location.pathname]);
+  const { user, isAuthenticated, logout } = useAuth();
+  const { unreadCount } = useNotifications();
 
   const handleLogout = async () => {
-    try {
-      await apiFetch('/auth/logout', { method: 'POST' });
-    } catch (e) {
-      console.error('Logout error:', e);
-    } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      setIsAuthenticated(false);
-      setUser(null);
-      navigate('/login');
-    }
+    await logout();
+    if (closeSidebar) closeSidebar();
+    navigate('/login');
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -75,11 +27,30 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
 
   const isActive = (path: string) => location.pathname === path;
 
+  const navLink = (to: string, icon: string, label: string, badge?: number) => (
+    <Link
+      to={to}
+      className={`btn ${isActive(to) ? 'btn-primary' : 'btn-secondary'}`}
+      style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
+    >
+      <i className={icon} style={{ fontSize: '1.15rem' }}></i>
+      <span>{label}</span>
+      {badge ? (
+        <span
+          className="badge-tag badge-coral"
+          style={{ marginLeft: 'auto', fontSize: '0.62rem', padding: '0.05rem 0.4rem' }}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </Link>
+  );
+
   return (
     <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
       {/* Brand Header — official wordmark */}
       <div className="sidebar-header" style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1.5px solid var(--color-line)' }}>
-        <Link to="/browse" style={{ textDecoration: 'none', display: 'block' }}>
+        <Link to="/feed" style={{ textDecoration: 'none', display: 'block' }}>
           <img
             src={websiteLogo}
             alt="Curious Bright"
@@ -88,13 +59,13 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         </Link>
       </div>
 
-      {/* Global Search Bar with Boxicon */}
+      {/* Global Search Bar */}
       <form onSubmit={handleSearch} style={{ marginBottom: '1.5rem', position: 'relative' }}>
         <input
           type="text"
-          placeholder="Search books, study rooms..."
+          placeholder="Search knowledge, research..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           style={{
             paddingLeft: '2.2rem',
             fontSize: '0.8125rem',
@@ -116,51 +87,30 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         ></i>
       </form>
 
-      {/* Navigation Links with Consistent Boxicons */}
+      {/* Navigation */}
       <nav className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
         <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginBottom: '0.25rem' }}>
-          Workspace
+          Community
         </div>
-        
-        <Link
-          to="/browse"
-          className={`btn ${isActive('/browse') ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
-        >
-          <i className="bx bx-book-open" style={{ fontSize: '1.15rem' }}></i>
-          <span>Open Library</span>
-        </Link>
 
-        <Link
-          to="/community"
-          className={`btn ${isActive('/community') ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
-        >
-          <i className="bx bx-conversation" style={{ fontSize: '1.15rem' }}></i>
-          <span>Study Rooms</span>
-        </Link>
+        {navLink('/feed', 'bx bx-conversation', 'Feed')}
+        {navLink('/research', 'bx bx-transfer-alt', 'Research Studio')}
+        {navLink('/notifications', 'bx bx-bell', 'Notifications', unreadCount)}
+        {isAuthenticated && user ? navLink(`/profile/${user.username}`, 'bx bx-user', 'My Profile') : null}
 
-        <Link
-          to="/submit"
-          className={`btn ${isActive('/submit') ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
-        >
-          <i className="bx bx-upload" style={{ fontSize: '1.15rem' }}></i>
-          <span>Share a Paper</span>
-        </Link>
+        <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
+          Library
+        </div>
+
+        {navLink('/browse', 'bx bx-book-open', 'Open Library')}
+        {navLink('/submit', 'bx bx-upload', 'Share a Paper')}
+        {navLink('/community', 'bx bx-video', 'Study Rooms')}
 
         <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
           Review Queue
         </div>
 
-        <Link
-          to="/moderate"
-          className={`btn ${isActive('/moderate') ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
-        >
-          <i className="bx bx-shield-quarter" style={{ fontSize: '1.15rem' }}></i>
-          <span>Community Review</span>
-        </Link>
+        {navLink('/moderate', 'bx bx-shield-quarter', 'Community Review')}
       </nav>
 
       {/* User Card */}
@@ -176,7 +126,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
           justifyContent: 'space-between',
         }}
       >
-        {isAuthenticated ? (
+        {isAuthenticated && user ? (
           <>
             <div className="flex items-center gap-2" style={{ overflow: 'hidden' }}>
               <div
@@ -194,19 +144,19 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
                   flexShrink: 0,
                 }}
               >
-                {user?.name?.[0]?.toUpperCase() || 'U'}
+                {user.username?.[0]?.toUpperCase() || 'U'}
               </div>
               <div style={{ overflow: 'hidden' }}>
-                <div className="font-semibold text-xs text-truncate" style={{ color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.name || 'Writer'}
+                <div className="font-semibold text-xs text-truncate" style={{ color: 'var(--color-ink)' }}>
+                  {user.username}
                 </div>
                 <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem', padding: '0.1rem 0.35rem' }}>
-                  {user?.schoolName || 'Co-author'}
+                  {user.profile?.badge_count ? `${user.profile.badge_count} badges` : 'Member'}
                 </span>
               </div>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className="btn btn-secondary"
               style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', flexShrink: 0 }}
             >
@@ -216,7 +166,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         ) : (
           <div className="flex flex-col gap-2" style={{ width: '100%' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-faded-ink)', textAlign: 'center' }}>
-              Join co-authors & study rooms
+              Join to teach, learn & collaborate
             </div>
             <div className="flex gap-2">
               <Link to="/login" className="btn btn-secondary" style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem' }}>
