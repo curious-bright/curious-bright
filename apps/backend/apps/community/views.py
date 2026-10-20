@@ -85,7 +85,9 @@ class PostViewSet(generics.ListCreateAPIView):
         if level:
             qs = qs.filter(academic_level=level)
         if params.get("attachment") == "only":
-            qs = qs.exclude(attachment="")
+            qs = qs.exclude(Q(attachment__isnull=True) | Q(attachment=""))
+        elif params.get("attachment") == "none":
+            qs = qs.filter(Q(attachment__isnull=True) | Q(attachment=""))
         if params.get("status") == "published":
             qs = qs.filter(review_status=Post.ReviewStatus.PUBLISHED)
         author = params.get("author")
