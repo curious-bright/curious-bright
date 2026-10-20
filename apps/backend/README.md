@@ -28,9 +28,9 @@ must set `DATABASE_URL` (PostgreSQL) — see [Deployment](#deployment-northflank
 | `DATABASE_URL` | **prod yes** | — | `postgres://user:pass@host:5432/db`; unset → SQLite |
 | `USE_SQLITE` | no | `false` | Force SQLite even if `DATABASE_URL` set (local only) |
 | `CORS_ALLOWED_ORIGINS` | no | `http://localhost:5173,...` | Comma-separated browser origins |
-| `ADMIN_USERNAME` | first deploy | — | Bootstrap admin username (`ensure_admin`) |
-| `ADMIN_EMAIL` | first deploy | — | Bootstrap admin email |
-| `ADMIN_PASSWORD` | first deploy | — | Bootstrap admin password (min 8 chars enforced by Django) |
+| `ADMIN_USERNAME` | no (optional) | — | Bootstrap superuser username; `start.sh` skips `ensure_admin` when unset |
+| `ADMIN_EMAIL` | no (optional) | — | Bootstrap superuser email |
+| `ADMIN_PASSWORD` | no (optional) | — | Bootstrap superuser password (min 8 chars enforced by Django) |
 
 Fixed (not env-tunable): JWT access 30 min / refresh 7 days with rotation +
 blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
@@ -38,11 +38,19 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
 
 ## Admin bootstrap
 
-- `venv/bin/python manage.py ensure_admin` — idempotent. **Fails loudly** with a
-  `CommandError` if `ADMIN_USERNAME/EMAIL/PASSWORD` are missing. Creates a
-  `is_staff` + `is_superuser` user (profile auto-created via `post_save` signal).
-  Never resets the password of an existing admin (rotate it manually in Django
-  admin or `changepassword`).
+- `venv/bin/python manage.py ensure_admin` — idempotent. Run directly it
+  **fails loudly** with a `CommandError` if `ADMIN_USERNAME/EMAIL/PASSWORD` are
+  missing. Creates a `is_staff` + `is_superuser` user (profile auto-created via
+  `post_save` signal). Never resets the password of an existing admin (rotate it
+  manually in Django admin or `changepassword`).
+- `start.sh` only calls it when all three `ADMIN_*` vars are set; otherwise it
+  logs a skip message and the deploy continues. Create the superuser yourself
+  from the server shell instead: `python manage.py createsuperuser`.
+- **Admin dashboard:** `/admin/` logs in with username + password and shows an
+  analytics overview — member, post, open-report, pending-application, room,
+  comment, research-document and badge counts — plus recent-activity panels
+  (posts awaiting review, open reports, pending moderator applications, newest
+  members) and the Recent actions sidebar.
 - Data migration `accounts/0002_bootstrap_admin` runs the same logic at deploy
   time but is **lenient**: if the env vars are missing it is a no-op, so builds
   don't break.
@@ -51,14 +59,16 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
 
 - **Image:** built from the repository root `Dockerfile`. The entrypoint is
   `apps/backend/scripts/start.sh`, which runs `migrate --noinput`,
-  `ensure_admin`, then gunicorn on `${PORT:-8000}`.
+  `ensure_admin` (only when `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`
+  are all set), `collectstatic --noinput`, then gunicorn on `${PORT:-8000}`.
 - **Database:** link a Northflank PostgreSQL addon to the service and expose its
   connection string as `DATABASE_URL`. Keep `DJANGO_DEBUG=false`.
 - **Required secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
-  `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, plus `ADMIN_USERNAME`,
-  `ADMIN_EMAIL`, `ADMIN_PASSWORD` for the first deploy.
-- **First boot:** expect one `Applying …` line per migration, then gunicorn
-  startup. `render.yaml` is a legacy template and is not used by Northflank.
+  `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_*` are optional —
+  drop them and run `python manage.py createsuperuser` in the platform shell.
+- **First boot:** expect one `Applying …` line per migration, then
+  `collectstatic`, then gunicorn startup. Verify with `GET /healthz/`
+  (`200 {"status": "ok", "database": true}`). `render.yaml` is a legacy template and is not used by Northflank.
 - **Troubleshooting stale databases:** `relation "accounts_user" does not exist`
   during `accounts.0002_bootstrap_admin` means `django_migrations` records
   `accounts.0001_initial` while the table was never created (partial deploy).
