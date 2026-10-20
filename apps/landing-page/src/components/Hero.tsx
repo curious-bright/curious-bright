@@ -43,11 +43,11 @@ export const Hero: React.FC = () => {
             {/* Live Cursor Badge Tag (Plain Words, Zero Dots!) */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-sm border border-[var(--color-line)] bg-white text-xs font-mono font-semibold text-[var(--color-ink)] shadow-xs">
               <span className="w-2 h-2 rounded-full bg-[var(--color-coral)]" />
-              <span>OKIKIOLAMILEKAN IS REVIEWING LIVE // NO VERSIONS LOST</span>
+              <span>STUDENTS ARE TEACHING STUDENTS // LIVE</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold tracking-tight text-[var(--color-ink)] leading-[1.12]">
-              Research is a{' '}
+              Learning is a{' '}
               <span className="highlight-stroke highlight-stroke-coral">
                 group project
               </span>
@@ -55,7 +55,8 @@ export const Hero: React.FC = () => {
             </h1>
 
             <p className="text-lg text-[var(--color-faded-ink)] leading-relaxed max-w-xl">
-              A free, open platform where students, researchers, and teachers publish papers and work on them together, live, in one place.
+              A free community where students teach each other, share knowledge and equations, earn badges for
+              helping others — and collaborate on research together, live, in one place.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -71,14 +72,18 @@ export const Hero: React.FC = () => {
             </div>
 
             {/* Micro proof bar */}
-            <div className="pt-4 flex items-center gap-6 border-t border-[var(--color-line)] text-xs text-[var(--color-faded-ink)] font-mono">
+            <div className="pt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-[var(--color-line)] text-xs text-[var(--color-faded-ink)] font-mono">
               <span className="flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 text-[var(--color-teal)]" />
-                10,000+ Shared Papers
+                Community Knowledge Feed
               </span>
               <span className="flex items-center gap-1.5">
                 <MessageCircle className="w-3.5 h-3.5 text-[var(--color-mustard)]" />
-                Live Margin Notes
+                Teacher &amp; Solver Badges
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Edit3 className="w-3.5 h-3.5 text-[var(--color-coral)]" />
+                Live Research Docs
               </span>
             </div>
           </div>
