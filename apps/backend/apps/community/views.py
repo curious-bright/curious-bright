@@ -37,6 +37,7 @@ class FollowingFeedView(generics.ListAPIView):
         followed_ids = user.following_set.values_list("followed_id", flat=True)
         return (
             Post.objects.filter(Q(author__in=followed_ids) | Q(author=user))
+            .filter(review_status=Post.ReviewStatus.PUBLISHED)
             .select_related("author", "author__profile")
             .prefetch_related("equations")
         )
@@ -46,10 +47,20 @@ class DiscoverFeedView(generics.ListAPIView):
     serializer_class = PostListSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = (
-        Post.objects.select_related("author", "author__profile")
+        Post.objects.filter(review_status=Post.ReviewStatus.PUBLISHED)
+        .select_related("author", "author__profile")
         .prefetch_related("equations")
         .order_by("-created_at")
     )
+
+
+def visible_posts(user):
+    """Published posts for everyone; authors additionally see their own
+    pending/rejected submissions (moderators inspect those via the queue)."""
+    base = Q(review_status=Post.ReviewStatus.PUBLISHED)
+    if user.is_authenticated:
+        base |= Q(author=user)
+    return Post.objects.filter(base)
 
 
 class PostViewSet(generics.ListCreateAPIView):
@@ -58,16 +69,31 @@ class PostViewSet(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = (
-            Post.objects.select_related("author", "author__profile")
+            visible_posts(self.request.user)
+            .select_related("author", "author__profile")
             .prefetch_related("equations")
             .order_by("-created_at")
         )
-        subject = self.request.query_params.get("subject")
+        params = self.request.query_params
+        subject = params.get("subject")
         if subject:
             qs = qs.filter(subject=subject)
-        author = self.request.query_params.get("author")
+        kind = params.get("kind")
+        if kind:
+            qs = qs.filter(kind=kind)
+        level = params.get("academic_level")
+        if level:
+            qs = qs.filter(academic_level=level)
+        if params.get("attachment") == "only":
+            qs = qs.exclude(attachment="")
+        if params.get("status") == "published":
+            qs = qs.filter(review_status=Post.ReviewStatus.PUBLISHED)
+        author = params.get("author")
         if author:
             qs = qs.filter(author__username=author)
+        search = params.get("search")
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(body__icontains=search))
         return qs
 
     def get_serializer_class(self):
@@ -84,11 +110,33 @@ class PostViewSet(generics.ListCreateAPIView):
         )
         notify_mentions(post.body, self.request.user, post=post)
 
+    def create(self, request, *args, **kwargs):
+        """Respond with the full list shape (review_status/attachment_url...)."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(
+            PostListSerializer(serializer.instance, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PostDetailSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     queryset = Post.objects.select_related("author", "author__profile").prefetch_related("equations")
+
+    def get_object(self):
+        obj = super().get_object()
+        user = self.request.user
+        is_moderator = bool(user.is_authenticated and (user.is_moderator or user.is_staff))
+        if obj.review_status != Post.ReviewStatus.PUBLISHED and not (
+            is_moderator or (user.is_authenticated and obj.author == user)
+        ):
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound(detail="No Post matches the given query.")
+        return obj
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):

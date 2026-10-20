@@ -49,11 +49,13 @@ class PostListSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     equations = EquationSerializer(many=True, read_only=True)
     liked_by_me = serializers.SerializerMethodField()
+    attachment_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
-            "id", "author", "title", "body", "subject", "kind", "is_solved",
+            "id", "author", "title", "body", "subject", "kind", "academic_level",
+            "review_status", "attachment_url", "attachment_name", "is_solved",
             "like_count", "comment_count", "equations", "liked_by_me", "created_at",
         ]
 
@@ -62,6 +64,16 @@ class PostListSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return Like.objects.filter(user=request.user, post=obj).exists()
+
+    def get_attachment_url(self, obj):
+        if not obj.attachment:
+            return None
+        request = self.context.get("request")
+        try:
+            url = obj.attachment.url
+        except ValueError:
+            return None
+        return request.build_absolute_uri(url) if request else url
 
 
 class PostDetailSerializer(PostListSerializer):
@@ -77,15 +89,33 @@ class PostDetailSerializer(PostListSerializer):
 
 class PostCreateSerializer(serializers.ModelSerializer):
     equations = EquationSerializer(many=True, required=False)
+    attachment = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = Post
-        fields = ["id", "title", "body", "subject", "kind", "equations"]
+        fields = [
+            "id", "title", "body", "subject", "kind", "academic_level",
+            "attachment", "equations",
+        ]
+
+    def validate_attachment(self, file):
+        if not file.name.lower().endswith(".pdf"):
+            raise serializers.ValidationError("Only PDF documents can be attached.")
+        if file.size > 25 * 1024 * 1024:
+            raise serializers.ValidationError("The PDF must be 25 MB or smaller.")
+        return file
 
     def create(self, validated_data):
         equations = validated_data.pop("equations", [])
+        attachment = validated_data.pop("attachment", None)
         request = self.context["request"]
         post = Post.objects.create(author=request.user, **validated_data)
+        if attachment:
+            post.attachment = attachment
+            post.attachment_name = attachment.name
+            # Uploaded papers enter the peer-review queue; plain posts publish directly.
+            post.review_status = Post.ReviewStatus.PENDING
+            post.save(update_fields=["attachment", "attachment_name", "review_status"])
         for eq in equations:
             Equation.objects.create(post=post, created_by=request.user, **{k: v for k, v in eq.items() if k != "post"})
         return post

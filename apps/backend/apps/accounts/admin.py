@@ -9,16 +9,31 @@ User = get_user_model()
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("username", "email", "is_staff", "is_active", "date_joined")
+    list_display = ("username", "email", "is_staff", "is_moderator", "is_active", "date_joined")
     search_fields = ("username", "email")
-    list_filter = ("is_staff", "is_active", "is_superuser")
+    list_filter = ("is_staff", "is_moderator", "is_active", "is_superuser")
+    fieldsets = BaseUserAdmin.fieldsets + (
+        ("Moderation", {"fields": ("is_moderator",)}),
+    )
     actions = [
         "deactivate_users",
         "reactivate_users",
+        "grant_moderator",
+        "revoke_moderator",
         "award_teacher",
         "award_solver",
         "award_collaborator",
     ]
+
+    @admin.action(description="Grant moderator role (review queue access)")
+    def grant_moderator(self, request, queryset):
+        updated = queryset.update(is_moderator=True)
+        self.message_user(request, f"Granted moderator to {updated} user(s).")
+
+    @admin.action(description="Revoke moderator role")
+    def revoke_moderator(self, request, queryset):
+        updated = queryset.update(is_moderator=False)
+        self.message_user(request, f"Revoked moderator from {updated} user(s).")
 
     @admin.action(description="Deactivate selected users (block login)")
     def deactivate_users(self, request, queryset):

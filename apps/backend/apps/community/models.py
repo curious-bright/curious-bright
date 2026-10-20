@@ -15,12 +15,28 @@ class Post(models.Model):
         QUESTION = "question", "Question"
         EXPLANATION = "explanation", "Explanation"
         NOTE = "note", "Note"
+        RESOURCE = "resource", "Resource"
+
+    class Level(models.TextChoices):
+        HIGH_SCHOOL = "high_school", "High school"
+        COLLEGE = "college", "College"
+        GRADUATE = "graduate", "Graduate"
+        PROFESSIONAL = "professional", "Professional"
+
+    class ReviewStatus(models.TextChoices):
+        PUBLISHED = "published", "Published"
+        PENDING = "pending", "Pending review"
+        REJECTED = "rejected", "Rejected"
 
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts")
     title = models.CharField(max_length=200)
     body = models.TextField()
     subject = models.CharField(max_length=20, choices=Subject.choices, default=Subject.GENERAL)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.NOTE)
+    academic_level = models.CharField(max_length=20, choices=Level.choices, default=Level.COLLEGE)
+    review_status = models.CharField(max_length=12, choices=ReviewStatus.choices, default=ReviewStatus.PUBLISHED)
+    attachment = models.FileField(upload_to="papers/%Y/%m/", null=True, blank=True)
+    attachment_name = models.CharField(max_length=255, blank=True)
     is_solved = models.BooleanField(default=False)
     like_count = models.PositiveIntegerField(default=0)
     comment_count = models.PositiveIntegerField(default=0)
@@ -100,6 +116,7 @@ class Notification(models.Model):
         BADGE = "badge", "earned a badge"
         SOLVED = "solved", "marked a post solved"
         RESEARCH = "research", "joined your research document"
+        REVIEW = "review", "reviewed your submission"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     actor = models.ForeignKey(
