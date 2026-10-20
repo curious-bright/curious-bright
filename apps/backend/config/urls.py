@@ -4,9 +4,11 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
 
-from apps.core.views import SearchView
+from apps.core.views import SearchView, health
 
 urlpatterns = [
+    path("", health, name="health"),
+    path("healthz/", health, name="healthz"),
     path("admin/", admin.site.urls),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/", include("apps.community.urls")),

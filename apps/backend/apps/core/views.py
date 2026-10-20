@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.db.models import Count, Q
+from django.http import JsonResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +12,19 @@ from apps.rooms.models import Room
 from apps.rooms.serializers import RoomSerializer
 
 User = get_user_model()
+
+
+def health(request):
+    """Liveness/readiness probe used by the hosting platform."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    status = 200 if db_ok else 503
+    return JsonResponse({"status": "ok" if db_ok else "degraded", "database": db_ok}, status=status)
+
 
 
 class SearchView(APIView):
