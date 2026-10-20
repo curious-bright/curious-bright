@@ -1,137 +1,63 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { apiFetch } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
-import { CursorTag } from '../components/CursorTag';
 import { CuriousLoading, CuriousError } from '../components/CuriousStates';
-import { motion } from 'framer-motion';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { ReactReader } from 'react-reader';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-interface DocumentItem {
-  id: string;
+interface SharedPaper {
+  id: number;
   title: string;
-  description?: string;
-  fileUrl: string;
-  academicLevel?: string;
-  license?: string;
-  cached?: boolean;
+  body: string;
+  subject: string;
+  kind: string;
+  academic_level: string;
+  attachment_url: string | null;
+  attachment_name: string;
+  author: { id: number; username: string };
+  created_at: string;
 }
 
 export default function Read() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [docItem, setDocItem] = useState<DocumentItem | null>(null);
+  const [paper, setPaper] = useState<SharedPaper | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pdfError, setPdfError] = useState(false);
-  const [locationEpub, setLocationEpub] = useState<string | number>(0);
-
-  // Demo Co-author Gliding Cursors & Live Typing Ripple
-  const [collaborators, setCollaborators] = useState([
-    { id: '1', name: 'Amara', action: 'reading page 1', color: '#FF5A36', x: 120, y: 180 },
-    { id: '2', name: 'Mateo', action: 'highlighting', color: '#00A896', x: 420, y: 310 },
-  ]);
-
-  const [liveMarginNote, setLiveMarginNote] = useState('');
-  const fullNoteText = "This passage directly connects with the quantum model discussed in chapter 4.";
-
-  useEffect(() => {
-    const cursorInterval = setInterval(() => {
-      setCollaborators(prev => prev.map(c => ({
-        ...c,
-        x: Math.min(680, Math.max(40, c.x + (Math.random() * 160 - 80))),
-        y: Math.min(540, Math.max(120, c.y + (Math.random() * 120 - 60))),
-      })));
-    }, 3200);
-
-    let charIndex = 0;
-    const typingInterval = setInterval(() => {
-      if (charIndex <= fullNoteText.length) {
-        setLiveMarginNote(fullNoteText.slice(0, charIndex));
-        charIndex++;
-      } else {
-        setTimeout(() => { charIndex = 0; }, 3000);
-      }
-    }, 70);
-
-    return () => {
-      clearInterval(cursorInterval);
-      clearInterval(typingInterval);
-    };
-  }, []);
 
   useEffect(() => {
     const fetchDocument = async () => {
+      if (!id) return;
       setLoading(true);
       setError('');
 
-      const navState = location.state as { fileUrl?: string; title?: string; description?: string; academicLevel?: string; license?: string } | null;
-      if (navState?.fileUrl) {
-        setDocItem({
-          id: id || 'doc',
-          title: navState.title || 'Shared Document',
-          description: navState.description,
-          fileUrl: navState.fileUrl,
-          academicLevel: navState.academicLevel,
-          license: navState.license,
-        });
+      const data = await apiFetch<SharedPaper & { attachment_url: string | null }>(`/posts/${id}/`);
+      if (!data) {
+        setError('We could not find this document or it is currently unavailable.');
         setLoading(false);
         return;
       }
 
-      try {
-        const bookData = await apiFetch(`/books/${id}/read`);
-        if (bookData?.fileUrl && bookData?.book) {
-          setDocItem({
-            id: bookData.book.id,
-            title: bookData.book.title,
-            description: bookData.book.description,
-            fileUrl: bookData.fileUrl,
-            academicLevel: bookData.book.academicLevel,
-            license: bookData.book.license,
-            cached: bookData.cached,
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        // Fallback to Submissions endpoint
+      // Notes without a PDF belong on the discussion page instead.
+      if (!data.attachment_url) {
+        navigate(`/post/${id}`, { replace: true });
+        return;
       }
 
-      try {
-        const subData = await apiFetch(`/submissions/${id}`);
-        if (subData?.fileUrl) {
-          setDocItem({
-            id: subData.id,
-            title: subData.title,
-            description: subData.description,
-            fileUrl: subData.fileUrl,
-            academicLevel: subData.academicLevel,
-            license: subData.license,
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e: any) {
-        setError('We could not find this document or it is currently unavailable.');
-      } finally {
-        setLoading(false);
-      }
+      setPaper(data);
+      setLoading(false);
     };
 
-    if (id) {
-      fetchDocument();
-    }
-  }, [id, location.state]);
+    fetchDocument();
+  }, [id, navigate]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -139,10 +65,10 @@ export default function Read() {
   }
 
   if (loading) {
-    return <CuriousLoading message="Opening shared document & syncing margin notes..." />;
+    return <CuriousLoading message="Opening shared document..." />;
   }
 
-  if (error || !docItem) {
+  if (error || !paper) {
     return (
       <div style={{ maxWidth: '600px', margin: '3rem auto' }}>
         <CuriousError
@@ -154,8 +80,7 @@ export default function Read() {
     );
   }
 
-  const fileUrl = docItem.fileUrl;
-  const isEpub = fileUrl?.toLowerCase().includes('.epub') || fileUrl?.toLowerCase().includes('epub+zip');
+  const fileUrl = paper.attachment_url!;
 
   return (
     <div className="flex flex-col items-center">
@@ -167,90 +92,49 @@ export default function Read() {
             <span>Back</span>
           </button>
           <div>
-            <h2 style={{ fontSize: '1.35rem' }}>{docItem.title}</h2>
-            <div className="flex items-center gap-2 mt-1">
-              {docItem.license && <span className="badge-tag badge-mustard">{docItem.license}</span>}
-              {docItem.academicLevel && <span className="badge-tag badge-teal">{docItem.academicLevel.replace('_', ' ')}</span>}
-              {docItem.cached && <span className="badge-tag badge-coral"><i className="bx bx-bolt-circle"></i> Ready instantly</span>}
+            <h2 style={{ fontSize: '1.35rem' }}>{paper.title}</h2>
+            <div className="flex items-center gap-2 mt-1" style={{ flexWrap: 'wrap' }}>
+              <span className="badge-tag badge-mustard">{paper.attachment_name || 'Shared PDF'}</span>
+              <span className="badge-tag badge-teal">
+                {paper.academic_level.replace('_', ' ').replace(/^./, c => c.toUpperCase())}
+              </span>
+              <span className="badge-tag badge-coral">@{paper.author.username}</span>
             </div>
           </div>
         </div>
 
-        {fileUrl && (
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={() => navigate(`/post/${paper.id}`)} style={{ padding: '0.45rem 0.95rem', fontSize: '0.8125rem' }}>
+            <i className="bx bx-message-rounded-dots" style={{ fontSize: '1.1rem' }}></i>
+            <span>Discuss</span>
+          </button>
           <a href={fileUrl} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8125rem' }}>
             <i className="bx bx-download" style={{ fontSize: '1.1rem' }}></i>
             <span>Save Local Copy</span>
           </a>
-        )}
+        </div>
       </div>
 
-      {/* Abstract & Live Typing Ripple Card */}
+      {/* Summary Card */}
       <div style={{ maxWidth: '860px', width: '100%' }} className="mb-6">
-        <CommentCornerCard commentPreview="Hover to inspect margin activity">
+        <CommentCornerCard commentPreview={`Shared by @${paper.author.username} — open the discussion for margin notes`}>
           <div className="flex justify-between items-start gap-4 mb-2">
             <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-faded-ink)' }} className="flex items-center gap-1">
               <i className="bx bx-notepad" style={{ fontSize: '0.95rem' }}></i>
-              Summary & Margin Notes
+              Summary
             </h4>
             <span className="badge-tag badge-coral" style={{ fontSize: '0.6875rem' }}>
-              Amara is typing live...
+              {paper.subject.replace(/^./, c => c.toUpperCase())}
             </span>
           </div>
-          {docItem.description && (
-            <p className="text-muted text-sm mb-3">{docItem.description}</p>
-          )}
-
-          {/* Live Typing Ripple Box */}
-          <div
-            style={{
-              padding: '0.75rem 1rem',
-              background: 'var(--color-paper)',
-              border: '1.5px solid var(--color-line)',
-              borderRadius: '4px 0px 4px 4px',
-              fontSize: '0.875rem',
-              fontStyle: 'italic',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <span style={{ color: '#FF5A36', fontWeight: 700 }}>Amara:</span>
-            <span>"{liveMarginNote}"</span>
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ duration: 0.8, repeat: Infinity }}
-              style={{ width: '2px', height: '14px', background: '#FF5A36', display: 'inline-block' }}
-            />
-          </div>
+          <p className="text-muted text-sm">{paper.body}</p>
         </CommentCornerCard>
       </div>
 
-      {/* PDF Reader Canvas Frame with Gliding Cursor Tags */}
+      {/* PDF Reader Canvas Frame */}
       <div style={{ maxWidth: '860px', width: '100%', position: 'relative' }}>
-        {collaborators.map((c) => (
-          <CursorTag
-            key={c.id}
-            id={c.id}
-            name={c.name}
-            action={c.action}
-            color={c.color}
-            x={c.x}
-            y={c.y}
-          />
-        ))}
-
         <CommentCornerCard style={{ padding: '1.5rem', minHeight: '520px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {isEpub ? (
-            <div style={{ position: 'relative', height: '600px', width: '100%', maxWidth: '760px' }}>
-              <ReactReader
-                url={fileUrl}
-                title={docItem.title}
-                location={locationEpub}
-                locationChanged={(epubLocation: string) => setLocationEpub(epubLocation)}
-              />
-            </div>
-          ) : pdfError ? (
+          {pdfError ? (
             <div className="text-center p-8">
               <p className="font-semibold mb-2">Unable to render PDF preview directly in browser.</p>
               <p className="text-muted text-sm mb-4">You can download the full PDF to read offline.</p>
@@ -274,11 +158,11 @@ export default function Read() {
           )}
 
           {/* Page Controls with Boxicons */}
-          {!isEpub && numPages && numPages > 0 && !pdfError && (
+          {numPages && numPages > 0 && !pdfError && (
             <div className="flex items-center gap-4 mt-6 pt-4" style={{ borderTop: '1.5px solid var(--color-line)', width: '100%', justifyContent: 'center' }}>
-              <button 
-                className="btn btn-secondary" 
-                disabled={pageNumber <= 1} 
+              <button
+                className="btn btn-secondary"
+                disabled={pageNumber <= 1}
                 onClick={() => setPageNumber(prev => prev - 1)}
                 style={{ padding: '0.4rem 0.85rem' }}
               >
@@ -290,9 +174,9 @@ export default function Read() {
                 Page <strong style={{ color: 'var(--color-ink)' }}>{pageNumber}</strong> of {numPages}
               </span>
 
-              <button 
-                className="btn btn-secondary" 
-                disabled={pageNumber >= numPages} 
+              <button
+                className="btn btn-secondary"
+                disabled={pageNumber >= numPages}
                 onClick={() => setPageNumber(prev => prev + 1)}
                 style={{ padding: '0.4rem 0.85rem' }}
               >
