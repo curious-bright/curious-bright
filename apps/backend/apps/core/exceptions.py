@@ -1,5 +1,4 @@
 from rest_framework import status
-from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
 CODE_MAP = {
@@ -17,14 +16,14 @@ CODE_MAP = {
 }
 
 
-def _error_code(exc):
+def error_code(exc):
     for klass in type(exc).__mro__:
         if klass.__name__ in CODE_MAP:
             return CODE_MAP[klass.__name__][0]
     return "api_error"
 
 
-def _error_status(exc):
+def error_status(exc):
     if getattr(exc, "status_code", None):
         return exc.status_code
     for klass in type(exc).__mro__:
@@ -33,11 +32,29 @@ def _error_status(exc):
     return status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
-def error_payload(code, message, details=None):
-    payload = {"code": code, "message": message}
-    if details:
-        payload["details"] = details
-    return payload
+def error_payload(code, message):
+    """The one and only API error envelope: {"code", "message"}."""
+    return {"code": code, "message": message}
+
+
+def _first_message(data):
+    """Flatten DRF's nested validation structure into one readable sentence."""
+    if isinstance(data, dict):
+        for field, value in data.items():
+            message = _first_message(value)
+            if not message:
+                continue
+            if field in ("detail", "non_field_errors"):
+                return message
+            return f"{str(field).replace('_', ' ').capitalize()}: {message}"
+        return ""
+    if isinstance(data, (list, tuple)):
+        for item in data:
+            message = _first_message(item)
+            if message:
+                return message
+        return ""
+    return str(data) if data else ""
 
 
 def custom_exception_handler(exc, context):
@@ -45,30 +62,12 @@ def custom_exception_handler(exc, context):
     if response is None:
         return None
 
-    code = _error_code(exc)
-    # Prefer DRF's normalized detail (Http404 etc. only carry .args on the raw exception)
-    if isinstance(response.data, dict) and "detail" in response.data:
-        message = response.data["detail"]
-    else:
-        message = getattr(exc, "detail", None)
-    details = None
+    code = error_code(exc)
+    message = _first_message(response.data)
+    if not message:
+        message = _first_message(getattr(exc, "detail", None))
+    if not message:
+        message = "Something went wrong."
 
-    if code == "validation_error":
-        if isinstance(message, dict):
-            details = {
-                str(k): [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
-                for k, v in message.items()
-            }
-            message = "Validation failed."
-        elif isinstance(message, (list, tuple)):
-            message = " ".join(str(x) for x in message) or "Validation failed."
-        else:
-            message = str(message or "Validation failed.")
-    elif isinstance(message, dict):
-        # e.g. SimpleJWT invalid-token payloads {"detail": ..., "code": ...}
-        message = str(message.get("detail") or message)
-    else:
-        message = str(message or "Something went wrong.")
-
-    response.data = error_payload(code, message, details)
+    response.data = error_payload(code, message)
     return response
