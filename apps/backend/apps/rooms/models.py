@@ -1,17 +1,30 @@
 from django.conf import settings
 from django.db import models
 
+from apps.core.models import SoftDeleteModel
 
-class Room(models.Model):
+
+class Room(SoftDeleteModel):
     name = models.CharField(max_length=120)
     topic = models.CharField(max_length=80, default="General Study")
+    description = models.TextField(blank=True)
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rooms",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="rooms_created"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
+        default_manager_name = "objects"
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return self.name

@@ -30,16 +30,30 @@ class Post(SoftDeleteModel):
         PENDING = "pending", "Pending review"
         REJECTED = "rejected", "Rejected"
 
+    class Visibility(models.TextChoices):
+        PUBLIC = "public", "Public"
+        FOLLOWERS = "followers", "Followers only"
+        ROOM_ONLY = "room_only", "Room only"
+
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts")
     title = models.CharField(max_length=200)
     body = models.TextField()
     subject = models.CharField(max_length=20, choices=Subject.choices, default=Subject.GENERAL)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.NOTE)
     academic_level = models.CharField(max_length=20, choices=Level.choices, default=Level.COLLEGE)
+    visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.PUBLIC)
+    organization = models.ForeignKey(
+        "organizations.Organization", null=True, blank=True, on_delete=models.SET_NULL, related_name="posts"
+    )
+    room = models.ForeignKey(
+        "rooms.Room", null=True, blank=True, on_delete=models.SET_NULL, related_name="posts"
+    )
     review_status = models.CharField(max_length=12, choices=ReviewStatus.choices, default=ReviewStatus.PUBLISHED)
     attachment = models.FileField(upload_to="papers/%Y/%m/", null=True, blank=True)
     attachment_name = models.CharField(max_length=255, blank=True)
     is_solved = models.BooleanField(default=False)
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(null=True, blank=True)
     like_count = models.PositiveIntegerField(default=0)
     comment_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -52,6 +66,13 @@ class Post(SoftDeleteModel):
 
     def __str__(self):
         return self.title
+
+    def delete(self, using=None, keep_parents=False, deleted_by=None):
+        super().delete(using=using, keep_parents=keep_parents, deleted_by=deleted_by)
+        # Cascade soft delete comments when post is soft-deleted
+        self.comments.filter(is_deleted=False).update(
+            is_deleted=True, deleted_at=self.deleted_at, deleted_by=deleted_by
+        )
 
 
 class Equation(models.Model):
@@ -74,8 +95,11 @@ class Comment(SoftDeleteModel):
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
     body = models.TextField(max_length=4000)
     is_accepted = models.BooleanField(default=False)
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(null=True, blank=True)
     helpful_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["created_at"]

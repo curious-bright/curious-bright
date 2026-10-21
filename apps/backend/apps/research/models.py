@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+from apps.core.models import SoftDeleteModel
 
-class ResearchDocument(models.Model):
+
+class ResearchDocument(SoftDeleteModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         PUBLISHED = "published", "Published"
@@ -14,11 +16,24 @@ class ResearchDocument(models.Model):
     body = models.TextField(blank=True)
     field = models.CharField(max_length=120, blank=True, help_text="e.g. Mathematics, Physics, Biology")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="research_documents",
+    )
+    attachment = models.FileField(upload_to="research_attachments/%Y/%m/", null=True, blank=True)
+    attachment_name = models.CharField(max_length=255, blank=True)
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-updated_at"]
+        default_manager_name = "objects"
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return self.title

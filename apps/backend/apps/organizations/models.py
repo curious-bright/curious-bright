@@ -7,8 +7,17 @@ from django.utils.text import slugify
 
 
 class Organization(models.Model):
+    class OrgType(models.TextChoices):
+        UNIVERSITY = "university", "University"
+        RESEARCH_INSTITUTE = "research_institute", "Research Institute"
+        NGO = "ngo", "NGO"
+        OTHER = "other", "Other"
+
     class Plan(models.TextChoices):
         FREE = "free", "Free"
+        NGO = "ngo", "NGO"
+        RESEARCH_INSTITUTE = "research_institute", "Research Institute"
+        UNIVERSITY = "university", "University"
         PRO = "pro", "Pro"
         ENTERPRISE = "enterprise", "Enterprise"
 
@@ -20,6 +29,8 @@ class Organization(models.Model):
 
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=80, unique=True, blank=True)
+    org_type = models.CharField(max_length=30, choices=OrgType.choices, default=OrgType.UNIVERSITY)
+    tier = models.ForeignKey("billing.PlanTier", null=True, blank=True, on_delete=models.SET_NULL, related_name="organizations")
     domain = models.CharField(
         max_length=255,
         unique=True,

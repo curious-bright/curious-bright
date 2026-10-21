@@ -20,7 +20,11 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     bio = models.TextField(blank=True, max_length=500)
     avatar = models.URLField(blank=True, max_length=500)
+    avatar_file = models.FileField(upload_to="avatars/%Y/%m/", null=True, blank=True)
     subject_expertise = models.CharField(max_length=120, blank=True)
+    country = models.CharField(max_length=100, blank=True, default="")
+    school = models.CharField(max_length=200, blank=True, default="")
+    must_change_password = models.BooleanField(default=False)
 
     post_count = models.PositiveIntegerField(default=0)
     followers_count = models.PositiveIntegerField(default=0)
