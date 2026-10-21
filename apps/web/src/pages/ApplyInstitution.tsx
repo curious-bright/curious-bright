@@ -7,7 +7,7 @@ export default function ApplyInstitution() {
   const [domain, setDomain] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [organization, setOrganization] = useState<{ name: string; slug: string } | null>(null);
 
   const user = (() => {
     try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
@@ -37,16 +37,11 @@ export default function ApplyInstitution() {
     setError('');
     setLoading(true);
     try {
-      await apiFetch('/organizations', {
+      const created = (await apiFetch('/organizations/', {
         method: 'POST',
-        body: JSON.stringify({ name, domain }),
-      });
-      
-      // Update local storage to show user is now part of an organization
-      const updatedUser = { ...user, isInstitutionAdmin: true }; // Just a UI hint
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      
-      setSuccess(true);
+        body: JSON.stringify({ name, domain: domain.trim() || null }),
+      })) as { name: string; slug: string };
+      setOrganization(created);
     } catch (err: any) {
       setError(err.message || 'Failed to register institution. Please try again.');
     } finally {
@@ -54,19 +49,25 @@ export default function ApplyInstitution() {
     }
   };
 
-  if (success) {
+  if (organization) {
     return (
       <div style={{ maxWidth: 540, margin: '3rem auto', textAlign: 'center' }} className="animate-fade-in">
         <div className="glass-card" style={{ padding: '3rem 2rem' }}>
           <div style={{ fontSize: '3.5rem', marginBottom: '1.25rem' }}>🎉</div>
-          <h2 style={{ marginBottom: '0.75rem' }}>Institution Registered!</h2>
+          <h2 style={{ marginBottom: '0.75rem' }}>{organization.name} is ready</h2>
           <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '2rem' }}>
-            Your organization has been created successfully. You can now manage your institution, members, and billing from the Institutional Dashboard.
+            You are the owner. Invite your teachers and students, then manage members, seats, and billing from the institutional dashboard.
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            {/* The institutional dashboard is on port 5174 currently */}
-            <a href="http://localhost:5174" className="btn btn-primary" target="_blank" rel="noreferrer">Go to Dashboard</a>
-            <Link to="/browse" className="btn btn-secondary">Browse Library</Link>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a
+              href={`${(import.meta.env.VITE_ORG_URL || 'https://org.curiousbright.com.ng').replace(/\/$/, '')}/${organization.slug}`}
+              className="btn btn-primary"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Go to Dashboard
+            </a>
+            <Link to="/feed" className="btn btn-secondary">Back to Feed</Link>
           </div>
         </div>
       </div>

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.research",
     "apps.moderation",
     "apps.rooms",
+    "apps.organizations",
 ]
 
 MIDDLEWARE = [
@@ -306,6 +307,16 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
 
 LOGIN_URL = "/admin/login/"
+
+# --- Email (invitations, verification, password reset) ---
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng")
+ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
 
 # Reversible content deletion: client undo window + hard-delete horizon.
 SOFT_DELETE_UNDO_SECONDS = env_int("SOFT_DELETE_UNDO_SECONDS", 300)

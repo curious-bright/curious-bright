@@ -32,6 +32,7 @@ import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import Research from './pages/Research';
 import ResearchDetail from './pages/ResearchDetail';
+import ApplyInstitution from './pages/ApplyInstitution';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -75,6 +76,7 @@ function App() {
                       <Route path="/notifications" element={<Notifications />} />
                       <Route path="/research" element={<Research />} />
                       <Route path="/research/:id" element={<ResearchDetail />} />
+                      <Route path="/apply-institution" element={<ApplyInstitution />} />
                       <Route path="/browse" element={<Browse />} />
                       <Route path="/submit" element={<Submit />} />
                       <Route path="/read/:id" element={<Read />} />
