@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.realtime.broadcast import publish
+
 from .models import Room, RoomMember, RoomMessage
 from .serializers import (
     RoomMemberSerializer,
@@ -83,4 +85,16 @@ class RoomMessagesView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         message = serializer.save(room=room, sender=request.user)
-        return Response(RoomMessageSerializer(message, context={"request": request}).data, status=status.HTTP_201_CREATED)
+        payload = RoomMessageSerializer(message, context={"request": request}).data
+        publish(
+            f"room.{room.pk}",
+            "room.message",
+            {
+                "id": payload["id"],
+                "room": payload["room"],
+                "sender": payload["sender"],
+                "content": payload["content"],
+                "created_at": payload["created_at"],
+            },
+        )
+        return Response(payload, status=status.HTTP_201_CREATED)

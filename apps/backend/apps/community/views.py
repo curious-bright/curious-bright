@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 
 from apps.core.permissions import IsOwnerOrReadOnly
 from apps.gamification.services import award_badge
+from apps.realtime.broadcast import publish
+from apps.realtime.feed import feed_groups
 
 from .models import Comment, HelpfulReaction, Like, Notification, Post
 from .notifications import notify, notify_mentions
@@ -115,6 +117,11 @@ class PostViewSet(generics.ListCreateAPIView):
             post_count=Post.objects.filter(author=self.request.user).count()
         )
         notify_mentions(post.body, self.request.user, post=post)
+        publish(
+            feed_groups(post.author),
+            "post.created",
+            PostListSerializer(post, context={"request": self.request}).data,
+        )
 
     def create(self, request, *args, **kwargs):
         """Respond with the full list shape (review_status/attachment_url...)."""
@@ -149,12 +156,25 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
             return PostCreateSerializer
         return PostDetailSerializer
 
+    def perform_update(self, serializer):
+        post = serializer.save()
+        publish(
+            set(feed_groups(post.author)) | {f"post.{post.pk}"},
+            "post.updated",
+            PostListSerializer(post, context={"request": self.request}).data,
+        )
+
     def perform_destroy(self, instance):
         instance.delete(deleted_by=self.request.user)
         from apps.accounts.models import Profile
 
         Profile.objects.filter(user=instance.author).update(
             post_count=Post.objects.filter(author=instance.author).count()
+        )
+        publish(
+            set(feed_groups(instance.author)) | {f"post.{instance.pk}"},
+            "post.deleted",
+            {"id": instance.pk},
         )
 
 
@@ -178,6 +198,7 @@ class MarkSolvedView(APIView):
             )
         post.is_solved = True
         post.save(update_fields=["is_solved"])
+        publish(f"post.{post.pk}", "post.solved", {"id": post.pk, "is_solved": True})
 
         accepted = post.comments.filter(is_accepted=True).select_related("author").first()
         if accepted:
@@ -209,6 +230,14 @@ class CommentCreateView(generics.CreateAPIView):
             parent = get_object_or_404(Comment, pk=self.request.data["parent"])
         comment = serializer.save(author=self.request.user, post=post, parent=parent)
         Post.objects.filter(pk=post.pk).update(comment_count=post.comment_count + 1)
+        publish(
+            f"post.{post.pk}",
+            "comment.created",
+            {
+                "comment": CommentSerializer(comment, context={"request": self.request}).data,
+                "comment_count": post.comment_count + 1,
+            },
+        )
         verb = Notification.VERB.REPLY if parent else Notification.VERB.COMMENT
         notify(
             post.author,
@@ -235,10 +264,22 @@ class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     queryset = Comment.objects.all()
 
+    def perform_update(self, serializer):
+        comment = serializer.save()
+        publish(
+            f"post.{comment.post_id}",
+            "comment.updated",
+            CommentSerializer(comment, context={"request": self.request}).data,
+        )
+
     def perform_destroy(self, instance):
         instance.delete(deleted_by=self.request.user)
-        Post.all_objects.filter(pk=instance.post_id).update(
-            comment_count=Comment.objects.filter(post_id=instance.post_id).count()
+        count = Comment.objects.filter(post_id=instance.post_id).count()
+        Post.all_objects.filter(pk=instance.post_id).update(comment_count=count)
+        publish(
+            f"post.{instance.post_id}",
+            "comment.deleted",
+            {"id": instance.pk, "post": instance.post_id, "comment_count": count},
         )
 
 
@@ -277,6 +318,8 @@ class RestorePostView(APIView):
         Profile.objects.filter(user=post.author).update(
             post_count=Post.objects.filter(author=post.author).count()
         )
+        payload = PostListSerializer(post, context={"request": request}).data
+        publish(set(feed_groups(post.author)) | {f"post.{post.pk}"}, "post.created", payload)
         return Response(PostDetailSerializer(post, context={"request": request}).data)
 
 
@@ -289,8 +332,15 @@ class RestoreCommentView(APIView):
         if blocked:
             return blocked
         comment.restore()
-        Post.all_objects.filter(pk=comment.post_id).update(
-            comment_count=Comment.objects.filter(post_id=comment.post_id).count()
+        count = Comment.objects.filter(post_id=comment.post_id).count()
+        Post.all_objects.filter(pk=comment.post_id).update(comment_count=count)
+        publish(
+            f"post.{comment.post_id}",
+            "comment.created",
+            {
+                "comment": CommentSerializer(comment, context={"request": request}).data,
+                "comment_count": count,
+            },
         )
         return Response(CommentSerializer(comment, context={"request": request}).data)
 
@@ -305,9 +355,11 @@ class ToggleLikeView(APIView):
             like.delete()
             post.like_count = max(0, post.like_count - 1)
             post.save(update_fields=["like_count"])
+            publish(f"post.{post.pk}", "post.like_count", {"id": post.pk, "like_count": post.like_count})
             return Response({"liked": False, "like_count": post.like_count})
         post.like_count += 1
         post.save(update_fields=["like_count"])
+        publish(f"post.{post.pk}", "post.like_count", {"id": post.pk, "like_count": post.like_count})
         notify(
             post.author,
             Notification.VERB.LIKE,
@@ -330,9 +382,19 @@ class ToggleHelpfulView(APIView):
             reaction.delete()
             comment.helpful_count = max(0, comment.helpful_count - 1)
             comment.save(update_fields=["helpful_count"])
+            publish(
+                f"post.{comment.post_id}",
+                "comment.helpful",
+                {"id": comment.pk, "helpful_count": comment.helpful_count},
+            )
             return Response({"helpful": False, "helpful_count": comment.helpful_count})
         comment.helpful_count += 1
         comment.save(update_fields=["helpful_count"])
+        publish(
+            f"post.{comment.post_id}",
+            "comment.helpful",
+            {"id": comment.pk, "helpful_count": comment.helpful_count},
+        )
         notify(
             comment.author,
             Notification.VERB.HELPFUL,
@@ -358,6 +420,11 @@ class AcceptAnswerView(APIView):
         comment.post.comments.filter(is_accepted=True).update(is_accepted=False)
         comment.is_accepted = True
         comment.save(update_fields=["is_accepted"])
+        publish(
+            f"post.{comment.post_id}",
+            "comment.accepted",
+            {"id": comment.pk, "post": comment.post_id},
+        )
         notify(
             comment.author,
             Notification.VERB.ACCEPTED,
@@ -383,4 +450,5 @@ class MarkNotificationsReadView(APIView):
 
     def post(self, request):
         updated = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        publish(f"user.{request.user.pk}", "notifications.read", {"updated": updated})
         return Response({"updated": updated})

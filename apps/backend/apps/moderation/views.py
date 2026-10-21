@@ -72,6 +72,11 @@ class ApprovePostView(APIView):
             text=f"Your submission '{post.title}' was published to the community",
             post=post,
         )
+        publish(
+            set(feed_groups(post.author)) | {f"post.{post.pk}"},
+            "post.created",
+            PostListSerializer(post, context={"request": request}).data,
+        )
         return Response(PostListSerializer(post, context={"request": request}).data)
 
 
@@ -88,6 +93,11 @@ class RejectPostView(APIView):
             actor=request.user,
             text=f"Your submission '{post.title}' was not approved for publishing",
             post=post,
+        )
+        publish(
+            set(feed_groups(post.author)) | {f"post.{post.pk}"},
+            "post.updated",
+            PostListSerializer(post, context={"request": request}).data,
         )
         return Response(PostListSerializer(post, context={"request": request}).data)
 

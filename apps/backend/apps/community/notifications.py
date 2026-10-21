@@ -14,9 +14,19 @@ def notify(user, verb, actor=None, text="", post=None, comment=None):
         return None
     if actor is not None and user == actor:
         return None  # never notify yourself
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         user=user, actor=actor, verb=verb, text=text, post=post, comment=comment
     )
+    from apps.realtime.broadcast import publish
+
+    from .serializers import NotificationSerializer
+
+    publish(
+        f"user.{user.pk}",
+        "notification.created",
+        NotificationSerializer(notification).data,
+    )
+    return notification
 
 
 def extract_mentions(body):
