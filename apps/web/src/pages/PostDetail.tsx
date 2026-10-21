@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { useRealtime } from '../lib/realtime';
 import { useAuth } from '../state/AuthContext';
 import { useFeed, type FeedComment, type FeedPost } from '../state/FeedContext';
 import { SubjectTag } from '../components/PostCard';
@@ -141,16 +142,20 @@ export default function PostDetail() {
   const [reportReason, setReportReason] = useState('');
   const [reported, setReported] = useState(false);
 
-  const loadPost = useCallback(async () => {
-    setLoading(true);
+  const loadPost = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const data = await apiFetch<FeedPost>(`/posts/${id}/`);
-    setPost(data);
-    setLoading(false);
+    if (data) setPost(data);
+    if (!silent) setLoading(false);
   }, [id]);
 
   useEffect(() => {
     void loadPost();
   }, [loadPost]);
+
+  useRealtime(id ? `/ws/posts/${id}/` : null, () => {
+    void loadPost(true);
+  });
 
   if (loading) return <CuriousLoading message="Loading discussion…" />;
   if (!post) {
@@ -176,7 +181,7 @@ export default function PostDetail() {
       body: JSON.stringify({ body, ...(parent ? { parent } : {}) }),
     });
     if (created) {
-      await loadPost();
+      await loadPost(true);
       return created;
     }
     return null;
@@ -184,17 +189,17 @@ export default function PostDetail() {
 
   const handleHelpful = async (commentId: number) => {
     await apiFetch(`/comments/${commentId}/helpful/`, { method: 'POST' });
-    await loadPost(); // counts confirmed by server; UI never reloaded a full page
+    await loadPost(true); // counts confirmed by server; UI never reloaded a full page
   };
 
   const handleAccept = async (commentId: number) => {
     await apiFetch(`/comments/${commentId}/accept/`, { method: 'POST' });
-    await loadPost();
+    await loadPost(true);
   };
 
   const handleSolve = async () => {
     await apiFetch(`/posts/${post.id}/solve/`, { method: 'POST' });
-    await loadPost();
+    await loadPost(true);
   };
 
   const handleReport = async () => {

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import { useRealtime } from '../lib/realtime';
 import { useAuth } from './AuthContext';
 
 export interface Notification {
@@ -48,22 +49,30 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     await apiFetch('/notifications/read-all/', { method: 'POST' });
   }, []);
 
-  // Initial load + gentle polling for new notifications
+  // Initial load, then real-time delivery over WebSockets.
   useEffect(() => {
     void load();
-    if (!isAuthenticated) return;
-    const interval = window.setInterval(async () => {
-      const data = await apiFetch<{ results: Notification[] }>('/notifications/?page_size=50');
-      if (data?.results) {
-        const fresh = data.results.filter((n) => !seenRef.current.has(n.id));
-        if (fresh.length) {
-          seenRef.current = new Set(data.results.map((n) => n.id));
-          setNotifications(data.results);
-        }
-      }
-    }, 30000);
-    return () => window.clearInterval(interval);
   }, [isAuthenticated, load]);
+
+  const { connected } = useRealtime(isAuthenticated ? '/ws/notifications/' : null, ({ event, data }) => {
+    if (event === 'notification.created') {
+      const incoming = data as Notification;
+      if (seenRef.current.has(incoming.id)) return;
+      seenRef.current.add(incoming.id);
+      setNotifications((prev) => [incoming, ...prev]);
+    } else if (event === 'notifications.read') {
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    }
+  });
+
+  const wasConnected = useRef(false);
+  useEffect(() => {
+    if (connected && wasConnected.current) {
+      // Catch anything missed while the socket was down.
+      void load();
+    }
+    wasConnected.current = connected;
+  }, [connected, load]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 

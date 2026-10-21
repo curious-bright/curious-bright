@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { apiFetch, resultsOf } from '../lib/api';
+import { useRealtime } from '../lib/realtime';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { CuriousLoading, CuriousError } from '../components/CuriousStates';
 import { useAuth } from '../state/AuthContext';
@@ -27,11 +28,9 @@ interface RoomInfo {
   created_at: string;
 }
 
-const POLL_MS = 3000;
-
 export default function Room() {
   const { id } = useParams<{ id: string }>();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
 
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -41,11 +40,14 @@ export default function Room() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
-  const [live, setLive] = useState(true);
+  const [onlineIds, setOnlineIds] = useState<Set<number>>(new Set());
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   const lastIdRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Set<number>>(new Set());
+  const typingTimers = useRef<Record<number, number>>({});
+  const lastTypingSent = useRef(0);
 
   const fetchRoomAndMembers = useCallback(async () => {
     const [room, memberList] = await Promise.all([
@@ -82,30 +84,69 @@ export default function Room() {
     };
   }, [id, authLoading, isAuthenticated, fetchRoomAndMembers]);
 
-  // Poll for new messages since the last one we have.
+  const fetchNewMessages = useCallback(async () => {
+    if (!id) return;
+    const suffix = lastIdRef.current > 0 ? `?after=${lastIdRef.current}` : '';
+    const incoming = await apiFetch<Message[]>(`/rooms/${id}/messages/${suffix}`);
+    if (!incoming) return;
+    const fresh = (Array.isArray(incoming) ? incoming : resultsOf<Message>(incoming)).filter(
+      m => !messagesRef.current.has(m.id)
+    );
+    if (fresh.length > 0) {
+      lastIdRef.current = Math.max(lastIdRef.current, fresh[fresh.length - 1].id);
+      setMessages(prev => [...prev, ...fresh]);
+    }
+  }, [id]);
+
+  const { connected, send } = useRealtime(id ? `/ws/rooms/${id}/` : null, ({ event, data }) => {
+    if (event === 'room.message') {
+      const incoming = data as Message;
+      setMessages(prev => (prev.some(m => m.id === incoming.id) ? prev : [...prev, incoming]));
+      lastIdRef.current = Math.max(lastIdRef.current, incoming.id);
+      return;
+    }
+    if (event === 'room.members') {
+      const payload = data as { members: { id: number }[] };
+      setOnlineIds(new Set(payload.members.map(m => m.id)));
+      return;
+    }
+    if (event === 'room.presence') {
+      const payload = data as { action: 'joined' | 'left'; user: { id: number; username: string } };
+      setOnlineIds(prev => {
+        const next = new Set(prev);
+        if (payload.action === 'joined') next.add(payload.user.id);
+        else next.delete(payload.user.id);
+        return next;
+      });
+      return;
+    }
+    if (event === 'room.typing') {
+      const payload = data as { user: { id: number; username: string }; is_typing: boolean };
+      if (payload.user.id === user?.id) return;
+      window.clearTimeout(typingTimers.current[payload.user.id]);
+      if (payload.is_typing) {
+        setTypingUsers(prev => (prev.includes(payload.user.username) ? prev : [...prev, payload.user.username]));
+        typingTimers.current[payload.user.id] = window.setTimeout(() => {
+          setTypingUsers(prev => prev.filter(name => name !== payload.user.username));
+        }, 4000);
+      } else {
+        setTypingUsers(prev => prev.filter(name => name !== payload.user.username));
+      }
+    }
+  }, { enabled: isAuthenticated });
+
+  // Slow fallback only while the socket is down, so messages are never lost.
   useEffect(() => {
-    if (!id || loading || !isAuthenticated) return;
+    if (!id || loading || !isAuthenticated || connected) return;
+    const timer = window.setInterval(() => void fetchNewMessages(), 8000);
+    return () => window.clearInterval(timer);
+  }, [id, loading, isAuthenticated, connected, fetchNewMessages]);
 
-    const poll = async () => {
-      const suffix = lastIdRef.current > 0 ? `?after=${lastIdRef.current}` : '';
-      const incoming = await apiFetch<Message[]>(`/rooms/${id}/messages/${suffix}`);
-      if (!incoming) {
-        setLive(false);
-        return;
-      }
-      setLive(true);
-      const fresh = (Array.isArray(incoming) ? incoming : resultsOf<Message>(incoming)).filter(
-        m => !messagesRef.current.has(m.id)
-      );
-      if (fresh.length > 0) {
-        lastIdRef.current = Math.max(lastIdRef.current, fresh[fresh.length - 1].id);
-        setMessages(prev => [...prev, ...fresh]);
-      }
+  useEffect(() => {
+    return () => {
+      Object.values(typingTimers.current).forEach(timer => window.clearTimeout(timer));
     };
-
-    const timer = setInterval(poll, POLL_MS);
-    return () => clearInterval(timer);
-  }, [id, loading, isAuthenticated]);
+  }, []);
 
   // Track current message ids for dedupe inside the interval closure.
   useEffect(() => {
@@ -129,6 +170,7 @@ export default function Room() {
     setSending(false);
 
     if (created?.id) {
+      send({ type: 'typing', is_typing: false });
       setNewMessage('');
       lastIdRef.current = Math.max(lastIdRef.current, created.id);
       setMessages(prev => (prev.some(m => m.id === created.id) ? prev : [...prev, created]));
@@ -190,9 +232,9 @@ export default function Room() {
             {/* Connection Status Bar */}
             <div style={{ padding: '0.6rem 1.25rem', background: 'var(--color-paper)', borderBottom: '1.5px solid var(--color-line)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div className="flex items-center gap-2">
-                <span className={`badge-tag ${live ? 'badge-teal' : 'badge-coral'}`} style={{ fontSize: '0.6875rem' }}>
-                  <i className={`bx ${live ? 'bx-pulse' : 'bx-wifi-off'}`} style={{ fontSize: '0.8rem' }}></i>{' '}
-                  {live ? 'Live — refreshing every few seconds' : 'Reconnecting...'}
+                <span className={`badge-tag ${connected ? 'badge-teal' : 'badge-coral'}`} style={{ fontSize: '0.6875rem' }}>
+                  <i className={`bx ${connected ? 'bx-pulse' : 'bx-wifi-off'}`} style={{ fontSize: '0.8rem' }}></i>{' '}
+                  {connected ? 'Live — real time' : 'Reconnecting…'}
                 </span>
                 <span className="text-muted">New messages appear automatically</span>
               </div>
@@ -239,13 +281,28 @@ export default function Room() {
               <div ref={messagesEndRef} />
             </div>
 
+            {typingUsers.length > 0 && (
+              <div className="text-xs text-muted" style={{ padding: '0.35rem 1.25rem', background: 'var(--color-paper)' }}>
+                {typingUsers.length === 1
+                  ? `${typingUsers[0]} is typing…`
+                  : `${typingUsers.slice(0, 2).join(', ')} are typing…`}
+              </div>
+            )}
+
             {/* Chat Input Bar */}
             <form onSubmit={handleSendMessage} style={{ padding: '1rem 1.25rem', borderTop: '1.5px solid var(--color-line)', background: 'var(--color-paper)', display: 'flex', gap: '0.75rem' }}>
               <input
                 type="text"
                 placeholder="Write a note or mention a co-author..."
                 value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
+                onChange={e => {
+                  setNewMessage(e.target.value);
+                  const now = Date.now();
+                  if (now - lastTypingSent.current > 1500) {
+                    lastTypingSent.current = now;
+                    send({ type: 'typing', is_typing: true });
+                  }
+                }}
                 style={{ flex: 1 }}
               />
               <button type="submit" className="btn btn-primary" disabled={!newMessage.trim() || sending}>
@@ -322,8 +379,11 @@ export default function Room() {
                       </div>
                     </div>
 
-                    <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem', padding: '0.1rem 0.4rem' }}>
-                      Member
+                    <span
+                      className={`badge-tag ${onlineIds.has(m.user.id) ? 'badge-teal' : 'badge-coral'}`}
+                      style={{ fontSize: '0.625rem', padding: '0.1rem 0.4rem' }}
+                    >
+                      {onlineIds.has(m.user.id) ? 'Online' : 'Member'}
                     </span>
                   </div>
                 ))}
