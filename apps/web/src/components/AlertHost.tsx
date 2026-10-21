@@ -9,8 +9,6 @@ export default function AlertHost() {
 
   if (!error) return null;
 
-  const detail = error.details ? Object.values(error.details).flat().join(' ') : null;
-
   return (
     <div
       role="alert"
@@ -32,14 +30,7 @@ export default function AlertHost() {
     >
       <span className="flex items-start gap-1.5" style={{ flex: 1 }}>
         <i className="bx bx-error-circle" style={{ fontSize: '1.1rem', marginTop: '0.1rem' }}></i>
-        <span>
-          {error.message}
-          {detail && error.details && (
-            <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.85, marginTop: '0.2rem' }}>
-              {detail}
-            </span>
-          )}
-        </span>
+        <span>{error.message}</span>
       </span>
       <button
         onClick={clearError}
