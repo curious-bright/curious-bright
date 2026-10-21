@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSerializer
@@ -25,9 +26,16 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = [
             "id", "post", "author", "parent", "body", "is_accepted",
-            "helpful_count", "replies", "mine", "i_found_helpful", "created_at",
+            "helpful_count", "replies", "mine", "i_found_helpful",
+            "is_deleted", "deleted_at", "created_at",
         ]
-        read_only_fields = ["is_accepted", "helpful_count"]
+        read_only_fields = ["is_accepted", "helpful_count", "is_deleted", "deleted_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.is_deleted:
+            data["body"] = ""
+        return data
 
     def get_replies(self, obj):
         if obj.parent_id:
@@ -83,7 +91,14 @@ class PostDetailSerializer(PostListSerializer):
         fields = PostListSerializer.Meta.fields + ["comments"]
 
     def get_comments(self, obj):
-        qs = obj.comments.filter(parent=None).select_related("author", "author__profile")
+        # Keep deleted top-level comments as tombstones while they still have
+        # visible replies, otherwise the thread loses its context.
+        qs = (
+            Comment.all_objects.filter(post=obj, parent=None)
+            .filter(Q(is_deleted=False) | Q(replies__is_deleted=False))
+            .distinct()
+            .select_related("author", "author__profile")
+        )
         return CommentSerializer(qs, many=True, context=self.context).data
 
 

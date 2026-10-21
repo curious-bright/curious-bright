@@ -22,6 +22,13 @@ def env_list(key, default=""):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def env_int(key, default):
+    try:
+        return int(os.environ.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
@@ -281,3 +288,7 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
 
 LOGIN_URL = "/admin/login/"
+
+# Reversible content deletion: client undo window + hard-delete horizon.
+SOFT_DELETE_UNDO_SECONDS = env_int("SOFT_DELETE_UNDO_SECONDS", 300)
+SOFT_DELETE_RETENTION_DAYS = env_int("SOFT_DELETE_RETENTION_DAYS", 30)

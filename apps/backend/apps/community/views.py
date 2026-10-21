@@ -1,6 +1,10 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
@@ -145,6 +149,14 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
             return PostCreateSerializer
         return PostDetailSerializer
 
+    def perform_destroy(self, instance):
+        instance.delete(deleted_by=self.request.user)
+        from apps.accounts.models import Profile
+
+        Profile.objects.filter(user=instance.author).update(
+            post_count=Post.objects.filter(author=instance.author).count()
+        )
+
 
 class MarkSolvedView(APIView):
     """Questioner confirms a problem as solved -> Solver badge to the
@@ -222,6 +234,65 @@ class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     queryset = Comment.objects.all()
+
+    def perform_destroy(self, instance):
+        instance.delete(deleted_by=self.request.user)
+        Post.all_objects.filter(pk=instance.post_id).update(
+            comment_count=Comment.objects.filter(post_id=instance.post_id).count()
+        )
+
+
+def _can_moderate(user):
+    return bool(user.is_authenticated and (user.is_moderator or user.is_staff))
+
+
+def _restore_check(obj, user, deleted_at):
+    if not obj.is_deleted:
+        return None
+    if obj.author_id != user.id and not _can_moderate(user):
+        return Response(
+            {"code": "forbidden", "message": "You can only restore your own content."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    window = getattr(settings, "SOFT_DELETE_UNDO_SECONDS", 300)
+    if not _can_moderate(user) and deleted_at and timezone.now() - deleted_at > timedelta(seconds=window):
+        return Response(
+            {"code": "restore_window_expired", "message": "The undo window for this item has passed."},
+            status=status.HTTP_410_GONE,
+        )
+    return None
+
+
+class RestorePostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        post = get_object_or_404(Post.all_objects, pk=pk)
+        blocked = _restore_check(post, request.user, post.deleted_at)
+        if blocked:
+            return blocked
+        post.restore()
+        from apps.accounts.models import Profile
+
+        Profile.objects.filter(user=post.author).update(
+            post_count=Post.objects.filter(author=post.author).count()
+        )
+        return Response(PostDetailSerializer(post, context={"request": request}).data)
+
+
+class RestoreCommentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        comment = get_object_or_404(Comment.all_objects, pk=pk)
+        blocked = _restore_check(comment, request.user, comment.deleted_at)
+        if blocked:
+            return blocked
+        comment.restore()
+        Post.all_objects.filter(pk=comment.post_id).update(
+            comment_count=Comment.objects.filter(post_id=comment.post_id).count()
+        )
+        return Response(CommentSerializer(comment, context={"request": request}).data)
 
 
 class ToggleLikeView(APIView):
