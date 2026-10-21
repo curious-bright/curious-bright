@@ -49,7 +49,7 @@ curious-bright/
 - **Study Rooms & Global Search:** Create or join study rooms with live message polling, and search across papers, notes, rooms and co-authors.
 - **Gamification Badges:** Automatic `Teacher`, `Solver` and `Collaborator` badges awarded on the platform’s core actions, shown on profiles.
 - **Research Collaboration:** Invite co-authors to research documents, edit live with revision history; editing co-authors earn the Collaborator badge.
-- **Centralized Error Handling:** Every API error returns `{code, message, details}`; the web client surfaces it through a single global alert and one API wrapper (auto token refresh, no alert storms).
+- **Centralized Error Handling:** Every API error returns `{code, message}`; the web client surfaces it through a single global alert and one API wrapper (auto token refresh, no alert storms).
 - **Cross-Platform Access:** Responsive web portal and landing page; the legacy Expo app is not part of the current deployment.
 
 ---

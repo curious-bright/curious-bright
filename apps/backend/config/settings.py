@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "apps.moderation",
     "apps.rooms",
     "apps.organizations",
+    "apps.billing",
 ]
 
 MIDDLEWARE = [
@@ -317,6 +318,22 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng")
 ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
+APP_FRONTEND_URL = env("APP_FRONTEND_URL", "https://app.curiousbright.com.ng")
+BILLING_CALLBACK_URL = env(
+    "BILLING_CALLBACK_URL", f"{APP_FRONTEND_URL.rstrip('/')}/payment/verify"
+)
+
+# --- Payments (Paystack) ---
+PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", "")
+PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", "")
+PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", "")
+PAYSTACK_API_BASE = env("PAYSTACK_API_BASE", "https://api.paystack.co")
+BILLING_PLAN_PRICES = {
+    "pro": {
+        "NGN": env_int("BILLING_PRO_NGN", 500000),
+        "USD": env_int("BILLING_PRO_USD", 1200),
+    }
+}
 
 # Reversible content deletion: client undo window + hard-delete horizon.
 SOFT_DELETE_UNDO_SECONDS = env_int("SOFT_DELETE_UNDO_SECONDS", 300)

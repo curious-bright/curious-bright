@@ -106,6 +106,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         {navLink('/submit', 'bx bx-upload', 'Share a Paper')}
         {navLink('/community', 'bx bx-video', 'Study Rooms')}
         {navLink('/apply-institution', 'bx bx-buildings', 'For Institutions')}
+        {navLink('/pricing', 'bx bx-purchase-tag', 'Pricing')}
 
         {isAuthenticated && (
           <>
