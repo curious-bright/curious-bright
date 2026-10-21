@@ -34,6 +34,8 @@ export interface FeedComment {
   mine: boolean;
   author: FeedAuthor | null;
   replies: FeedComment[];
+  is_deleted?: boolean;
+  deleted_at?: string | null;
   created_at: string;
 }
 

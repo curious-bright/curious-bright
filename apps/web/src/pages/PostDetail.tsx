@@ -45,14 +45,21 @@ function CommentThread({
           <span className="text-xs text-muted">{new Date(comment.created_at).toLocaleString()}</span>
         </div>
 
-        {comment.is_accepted && (
+        {comment.is_accepted && !comment.is_deleted && (
           <span className="badge-tag badge-teal" style={{ marginBottom: '0.4rem', display: 'inline-block' }}>
             <i className="bx bx-check-circle"></i> accepted answer
           </span>
         )}
 
-        <p className="text-sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{comment.body}</p>
+        {comment.is_deleted ? (
+          <p className="text-sm text-muted" style={{ lineHeight: 1.6, fontStyle: 'italic' }}>
+            This comment was deleted.
+          </p>
+        ) : (
+          <p className="text-sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{comment.body}</p>
+        )}
 
+        {!comment.is_deleted && (
         <div className="flex items-center gap-2" style={{ marginTop: '0.6rem', flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary"
@@ -79,8 +86,9 @@ function CommentThread({
             </button>
           )}
         </div>
+        )}
 
-        {replying && (
+        {!comment.is_deleted && replying && (
           <div style={{ marginTop: '0.6rem' }}>
             <textarea
               value={replyBody}
