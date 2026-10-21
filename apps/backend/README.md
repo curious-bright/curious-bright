@@ -32,6 +32,19 @@ must set `DATABASE_URL` (PostgreSQL) — see [Deployment](#deployment-northflank
 | `ADMIN_USERNAME` | no (optional) | — | Bootstrap superuser username; `start.sh` skips `ensure_admin` when unset |
 | `ADMIN_EMAIL` | no (optional) | — | Bootstrap superuser email |
 | `ADMIN_PASSWORD` | no (optional) | — | Bootstrap superuser password (min 8 chars enforced by Django) |
+| `REDIS_URL` | prod recommended | — | Enables Channels Redis + multiple uvicorn workers; without it WebSockets use in-memory and workers=1 |
+| `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Institution dashboard used in invitation links |
+| `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Web client URL; billing callback is derived from it |
+| `BILLING_CALLBACK_URL` | no | `${APP_FRONTEND_URL}/payment/verify` | Where Paystack returns after checkout |
+| `EMAIL_BACKEND` | no | console | SMTP backend for invitations, e.g. `django.core.mail.backends.smtp.EmailBackend` |
+| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials |
+| `DEFAULT_FROM_EMAIL` | no | `no-reply@curiousbright.com.ng` | Invitation sender |
+| `PAYSTACK_PUBLIC_KEY` | billing | — | Public key (safe for clients) |
+| `PAYSTACK_SECRET_KEY` | billing | — | Server key; also verifies webhook HMAC-SHA512 signatures |
+| `PAYSTACK_WEBHOOK_SECRET` | no | falls back to secret key | Separate webhook secret if configured in Paystack |
+| `PAYSTACK_API_BASE` | no | `https://api.paystack.co` | Override for tests/sandbox proxies |
+| `BILLING_PRO_NGN` | no | `500000` | Pro price in kobo (₦5,000) |
+| `BILLING_PRO_USD` | no | `1200` | Pro price in cents ($12) |
 
 Fixed (not env-tunable): JWT access 30 min / refresh 7 days with rotation +
 blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
@@ -63,12 +76,20 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
 - **Image:** built from the repository root `Dockerfile`. The entrypoint is
   `apps/backend/scripts/start.sh`, which runs `migrate --noinput`,
   `ensure_admin` (only when `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`
-  are all set), `collectstatic --noinput`, then gunicorn on `${PORT:-8000}`.
+  are all set), `collectstatic --noinput`, then uvicorn (ASGI) on `${PORT:-8000}`.
+  With `REDIS_URL` set it runs 3 workers; otherwise one worker and in-memory
+  Channels.
 - **Database:** link a Northflank PostgreSQL addon to the service and expose its
   connection string as `DATABASE_URL`. Keep `DJANGO_DEBUG=false`.
 - **Required secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
   `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_*` are optional —
   drop them and run `python manage.py createsuperuser` in the platform shell.
+- **Realtime:** link a Northflank Redis addon and set `REDIS_URL`; without it
+  WebSockets still work but only within a single worker.
+- **Billing:** set `PAYSTACK_SECRET_KEY` and point the Paystack dashboard
+  webhook at `https://api.curiousbright.com.ng/api/billing/webhook/paystack/`.
+  The endpoint rejects unsigned requests and is idempotent. USD checkout also
+  requires USD to be enabled on the Paystack account.
 - **First boot:** expect one `Applying …` line per migration, then
   `collectstatic`, then gunicorn startup. Verify with `GET /healthz/`
   (`200 {"status": "ok", "database": true}`). `render.yaml` is a legacy template and is not used by Northflank.
@@ -86,10 +107,33 @@ blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
   Do not delete migration rows selectively — other apps may be recorded without
   their tables too.
 - **Media files:** `MEDIA_ROOT` is inside the container, so uploaded PDFs are
-  lost on redeploy. Mount a persistent volume at `apps/backend/media` (or switch
-  to object storage) for durable uploads.
+  lost on redeploy. Mount a persistent volume at `apps/backend/media` until the
+  S3-compatible storage backend is wired up.
 
 ## API overview (all JSON, trailing slashes)
+
+- Organizations: `GET/POST /api/organizations/`, `GET/PATCH/DELETE /api/organizations/<slug>/`,
+  `GET /api/organizations/<slug>/members/`, `POST /api/organizations/<slug>/members/invite/`,
+  `PATCH/DELETE /api/organizations/<slug>/members/<id>/`,
+  `GET /api/organizations/<slug>/invitations/`,
+  `DELETE /api/organizations/<slug>/invitations/<id>/`,
+  `GET /api/organizations/invitations/me/`,
+  `POST /api/organizations/invitations/<uuid>/accept/`,
+  `POST /api/organizations/join-by-domain/`,
+  `GET /api/organizations/<slug>/stats/`, `GET /api/organizations/<slug>/audit-logs/`
+  - Roles: owner > admin > moderator > teacher/student > member. Admins invite and
+    manage lower roles; only owners deactivate an organization or manage billing.
+  - Seat limits: Free 50, Pro 500, Enterprise unlimited (`0`); pending invitations
+    count against seats. New accounts auto-accept matching invitations and
+    auto-join an organization with `auto_join_domain` enabled.
+- Billing: `GET /api/billing/plans/?currency=NGN|USD`,
+  `POST /api/billing/checkout/` (`{organization, plan_code, currency}`),
+  `GET /api/billing/payments/<reference>/`,
+  `POST /api/billing/payments/<reference>/verify/`,
+  `POST /api/billing/webhook/paystack/` (HMAC-SHA512 signature required),
+  `GET /api/organizations/<slug>/subscription/`,
+  `POST /api/organizations/<slug>/subscribe/`
+
 
 - Auth: `POST /api/auth/register/`, `POST /api/auth/token/` (username **or**
   email), `POST /api/auth/token/refresh/`, `POST /api/auth/logout/` (blacklists),

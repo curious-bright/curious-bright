@@ -25,7 +25,7 @@ import Search from './pages/Search';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfUse from './pages/TermsOfUse';
 import PaymentVerify from './pages/PaymentVerify';
-import CustomPayment from './pages/CustomPayment';
+import Pricing from './pages/Pricing';
 import Feed from './pages/Feed';
 import PostDetail from './pages/PostDetail';
 import Profile from './pages/Profile';
@@ -89,8 +89,9 @@ function App() {
                       <Route path="/search" element={<Search />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
                       <Route path="/terms" element={<TermsOfUse />} />
+                      <Route path="/pricing" element={<Pricing />} />
                       <Route path="/payment/verify" element={<PaymentVerify />} />
-                      <Route path="/pay" element={<CustomPayment />} />
+                      <Route path="/pay" element={<Navigate to="/pricing" replace />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </PageTurnContainer>

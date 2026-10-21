@@ -1,79 +1,108 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { apiFetch } from '../lib/api';
+import { useAuth } from '../state/AuthContext';
+
+interface PaymentResult {
+  reference: string;
+  status: 'pending' | 'success' | 'failed' | 'abandoned';
+  organization_name?: string;
+  plan_code?: string;
+}
 
 export default function PaymentVerify() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'success' | 'failed'>('loading');
-  const [message, setMessage] = useState('Verifying your payment...');
+  const { isAuthenticated, loading } = useAuth();
+  const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'failed'>('loading');
+  const [payment, setPayment] = useState<PaymentResult | null>(null);
 
-  const reference = searchParams.get('reference');
+  const reference = searchParams.get('reference') || searchParams.get('trxref');
 
   useEffect(() => {
+    if (loading) return;
     if (!reference) {
       setStatus('failed');
-      setMessage('No payment reference found.');
+      return;
+    }
+    if (!isAuthenticated) {
+      setStatus('failed');
       return;
     }
 
-    const verifyPayment = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://api.curiousbright.com.ng';
-        const res = await fetch(`${apiUrl}/payment/verify/${reference}`);
-        const data = await res.json();
-
-        if (res.ok && data.status === 'success') {
-          setStatus('success');
-          setMessage('Payment successful! Thank you.');
-          
-          // Optionally, redirect to a success page or dashboard after a few seconds
-          setTimeout(() => {
-            navigate('/browse', { replace: true });
-          }, 3000);
-        } else {
-          setStatus('failed');
-          setMessage(data.error || 'Payment verification failed or was not successful.');
-        }
-      } catch (err) {
+    let alive = true;
+    apiFetch<PaymentResult>(`/billing/payments/${encodeURIComponent(reference)}/verify/`, {
+      method: 'POST',
+    }).then(result => {
+      if (!alive) return;
+      if (!result) {
         setStatus('failed');
-        setMessage('An error occurred while verifying the payment.');
+        return;
       }
+      setPayment(result);
+      if (result.status === 'success') setStatus('success');
+      else if (result.status === 'pending') setStatus('pending');
+      else setStatus('failed');
+    });
+    return () => {
+      alive = false;
     };
-
-    verifyPayment();
-  }, [reference, navigate]);
+  }, [reference, isAuthenticated, loading]);
 
   return (
     <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', textAlign: 'center' }}>
-      <div style={{ background: 'var(--color-surface)', padding: '2rem', borderRadius: '1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+      <div className="glass-card" style={{ maxWidth: 460, width: '100%', padding: '2.5rem 2rem' }}>
         {status === 'loading' && (
           <>
-            <i className="bx bx-loader-alt bx-spin" style={{ fontSize: '3rem', color: 'var(--color-brand)' }}></i>
-            <h2 style={{ marginTop: '1rem', color: 'var(--color-ink)' }}>Verifying Payment...</h2>
-            <p style={{ color: 'var(--color-ink-light)' }}>Please don't close this page.</p>
+            <i className="bx bx-loader-alt bx-spin" style={{ fontSize: '3rem', color: 'var(--color-coral)' }}></i>
+            <h2 style={{ marginTop: '1rem' }}>Confirming your payment…</h2>
+            <p style={{ color: 'var(--text-muted)' }}>Please keep this page open.</p>
           </>
         )}
 
         {status === 'success' && (
           <>
-            <i className="bx bxs-check-circle" style={{ fontSize: '3rem', color: '#10b981' }}></i>
-            <h2 style={{ marginTop: '1rem', color: '#10b981' }}>Payment Successful!</h2>
-            <p style={{ color: 'var(--color-ink-light)', marginBottom: '1rem' }}>{message}</p>
-            <p style={{ fontSize: '0.9rem', color: 'var(--color-ink-light)' }}>Redirecting...</p>
+            <i className="bx bxs-check-circle" style={{ fontSize: '3rem', color: 'var(--color-teal)' }}></i>
+            <h2 style={{ marginTop: '1rem', color: 'var(--color-teal)' }}>Payment confirmed</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              {payment?.organization_name || 'Your organization'} is now on the{' '}
+              <strong>{payment?.plan_code || 'paid'}</strong> plan.
+            </p>
+            <div className="flex justify-center gap-2" style={{ flexWrap: 'wrap' }}>
+              <Link to="/pricing" className="btn btn-primary">View plans</Link>
+              <Link to="/feed" className="btn btn-secondary">Back to feed</Link>
+            </div>
+          </>
+        )}
+
+        {status === 'pending' && (
+          <>
+            <i className="bx bx-time-five" style={{ fontSize: '3rem', color: 'var(--color-mustard)' }}></i>
+            <h2 style={{ marginTop: '1rem' }}>Payment still pending</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              Paystack has not confirmed this transaction yet. It usually clears within a minute.
+              Refresh this page to check again.
+            </p>
+            <button className="btn btn-primary" onClick={() => window.location.reload()}>
+              Check again
+            </button>
           </>
         )}
 
         {status === 'failed' && (
           <>
-            <i className="bx bxs-x-circle" style={{ fontSize: '3rem', color: '#ef4444' }}></i>
-            <h2 style={{ marginTop: '1rem', color: '#ef4444' }}>Payment Failed</h2>
-            <p style={{ color: 'var(--color-ink-light)' }}>{message}</p>
-            <button 
-              onClick={() => navigate('/browse')}
-              style={{ marginTop: '1.5rem', background: 'var(--color-brand)', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer' }}
-            >
-              Return Home
-            </button>
+            <i className="bx bxs-x-circle" style={{ fontSize: '3rem', color: 'var(--color-coral)' }}></i>
+            <h2 style={{ marginTop: '1rem', color: 'var(--color-coral)' }}>Payment not confirmed</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              {!reference
+                ? 'No payment reference was provided.'
+                : !isAuthenticated
+                  ? 'Sign in with the account that started this payment, then reopen the link.'
+                  : 'The transaction was not successful. Nothing has been charged to your plan.'}
+            </p>
+            <div className="flex justify-center gap-2" style={{ flexWrap: 'wrap' }}>
+              {!isAuthenticated && <Link to="/login" className="btn btn-primary">Sign in</Link>}
+              <Link to="/pricing" className="btn btn-secondary">Back to plans</Link>
+            </div>
           </>
         )}
       </div>
