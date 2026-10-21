@@ -7,12 +7,16 @@ from channels.db import database_sync_to_async
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.security.websocket import OriginValidator
 from django.conf import settings
+from django.core.asgi import get_asgi_application
+
+# Initialise Django (populate the app registry) before importing any models.
+django_asgi_app = get_asgi_application()
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.core.asgi import get_asgi_application
 from rest_framework_simplejwt.tokens import AccessToken
 
-django_asgi_app = get_asgi_application()
+from apps.realtime.routing import websocket_urlpatterns
 
 User = get_user_model()
 
@@ -41,8 +45,6 @@ class JWTAuthMiddleware:
         scope["user"] = await _user_from_token(token) if token else AnonymousUser()
         return await self.inner(scope, receive, send)
 
-
-from apps.realtime.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter(
     {
