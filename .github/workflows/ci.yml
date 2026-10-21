@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Tests
+        env:
+          USE_SQLITE: "true"
+          DJANGO_DEBUG: "true"
+        run: python manage.py test -v 1
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck
+        run: pnpm --filter web exec tsc --noEmit
+      - name: Build web
+        run: pnpm --filter web exec vite build
+      - name: Build landing page
+        run: pnpm --filter @curious-bright/landing-page build

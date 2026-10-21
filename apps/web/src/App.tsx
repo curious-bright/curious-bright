@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import AlertHost from './components/AlertHost';
+import ErrorBoundary from './components/ErrorBoundary';
 import { PageTurnContainer } from './components/PageTurnContainer';
 import { ErrorProvider } from './state/ErrorContext';
 import { AuthProvider } from './state/AuthContext';
@@ -31,6 +32,8 @@ import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import Research from './pages/Research';
 import ResearchDetail from './pages/ResearchDetail';
+import ApplyInstitution from './pages/ApplyInstitution';
+import NotFound from './pages/NotFound';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -42,6 +45,7 @@ function App() {
           <NotificationProvider>
             <Router>
               <AlertHost />
+              <ErrorBoundary>
               <div className="app-shell">
                 <div
                   className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`}
@@ -72,6 +76,7 @@ function App() {
                       <Route path="/notifications" element={<Notifications />} />
                       <Route path="/research" element={<Research />} />
                       <Route path="/research/:id" element={<ResearchDetail />} />
+                      <Route path="/apply-institution" element={<ApplyInstitution />} />
                       <Route path="/browse" element={<Browse />} />
                       <Route path="/submit" element={<Submit />} />
                       <Route path="/read/:id" element={<Read />} />
@@ -86,10 +91,12 @@ function App() {
                       <Route path="/terms" element={<TermsOfUse />} />
                       <Route path="/payment/verify" element={<PaymentVerify />} />
                       <Route path="/pay" element={<CustomPayment />} />
+                      <Route path="*" element={<NotFound />} />
                     </Routes>
                   </PageTurnContainer>
                 </main>
               </div>
+              </ErrorBoundary>
             </Router>
           </NotificationProvider>
         </FeedProvider>

@@ -8,21 +8,18 @@ const REFRESH_KEY = 'lb_refresh';
 export interface ApiErrorShape {
   code: string;
   message: string;
-  details?: Record<string, string[]>;
   status: number;
 }
 
 export class ApiError extends Error implements ApiErrorShape {
   code: string;
-  details?: Record<string, string[]>;
   status: number;
 
-  constructor(code: string, message: string, status: number, details?: Record<string, string[]>) {
+  constructor(code: string, message: string, status: number) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
-    this.details = details;
   }
 }
 
@@ -63,27 +60,19 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_KEY);
 }
 
-function formatDetails(details?: Record<string, string[]>): string | undefined {
-  if (!details) return undefined;
-  const parts = Object.values(details).flat();
-  return parts.length ? parts.join(' ') : undefined;
-}
-
 async function parseError(response: Response): Promise<ApiError> {
   let code = 'unknown_error';
   let message = `Request failed (${response.status})`;
-  let details: Record<string, string[]> | undefined;
   try {
     const body = await response.json();
     if (body && typeof body === 'object') {
       code = body.code || code;
       message = body.message || message;
-      details = body.details;
     }
   } catch {
     // non-JSON error body (e.g. HTML page) — keep defaults
   }
-  return new ApiError(code, message, response.status, details);
+  return new ApiError(code, message, response.status);
 }
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -165,11 +154,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     return (await request(endpoint, options)) as T;
   } catch (err) {
     if (err instanceof ApiError) {
-      const detail = formatDetails(err.details);
-      showError(detail ? `${err.message} — ${detail}` : err.message, {
-        code: err.code,
-        details: err.details,
-      });
+      showError(err.message, { code: err.code });
       if (err.code === 'unauthenticated' || err.status === 401) {
         clearTokens();
       }

@@ -22,6 +22,13 @@ def env_list(key, default=""):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def env_int(key, default):
+    try:
+        return int(os.environ.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
@@ -41,6 +48,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "channels",
     "apps.core",
     "apps.accounts",
     "apps.community",
@@ -48,10 +56,12 @@ INSTALLED_APPS = [
     "apps.research",
     "apps.moderation",
     "apps.rooms",
+    "apps.organizations",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.middleware.RequestIDMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -235,6 +245,23 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"
 
+ASGI_APPLICATION = "config.asgi.application"
+
+# WebSockets use Redis in production (required for more than one worker).
+# Local dev and tests fall back to an in-process layer.
+REDIS_URL = env("REDIS_URL", "")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    }
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -280,3 +307,17 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
 
 LOGIN_URL = "/admin/login/"
+
+# --- Email (invitations, verification, password reset) ---
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng")
+ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
+
+# Reversible content deletion: client undo window + hard-delete horizon.
+SOFT_DELETE_UNDO_SECONDS = env_int("SOFT_DELETE_UNDO_SECONDS", 300)
+SOFT_DELETE_RETENTION_DAYS = env_int("SOFT_DELETE_RETENTION_DAYS", 30)

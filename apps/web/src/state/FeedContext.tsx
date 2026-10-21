@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import { useRealtime } from '../lib/realtime';
 import { useAuth } from './AuthContext';
 
 export interface FeedAuthor {
@@ -34,6 +35,8 @@ export interface FeedComment {
   mine: boolean;
   author: FeedAuthor | null;
   replies: FeedComment[];
+  is_deleted?: boolean;
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -45,6 +48,7 @@ export interface FeedPost {
   subject: string;
   kind: string;
   is_solved: boolean;
+  review_status?: string;
   like_count: number;
   comment_count: number;
   equations: FeedEquation[];
@@ -78,7 +82,7 @@ interface RawPage {
 }
 
 export function FeedProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [tab, setTabState] = useState<FeedTab>('discover');
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -178,12 +182,48 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     }): Promise<FeedPost | null> => {
       const created = await apiFetch<FeedPost>('/posts/', { method: 'POST', body: JSON.stringify(payload) });
       if (created) {
-        setPosts((prev) => [created, ...prev]);
+        setPosts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
       }
       return created;
     },
     [],
   );
+
+  const applyRealtime = useCallback(
+    ({ event, data }: { event: string; data: any }) => {
+      if (event === 'post.created' || event === 'post.updated') {
+        const incoming = data as FeedPost;
+        const mine = incoming.author?.username === user?.username;
+        const published = !incoming.review_status || incoming.review_status === 'published';
+        const followed = followState[incoming.author?.username] ?? false;
+        const visible = published && (tab !== 'following' || mine || followed);
+
+        setPosts((prev) => {
+          const exists = prev.some((p) => p.id === incoming.id);
+          if (!visible) return prev.filter((p) => p.id !== incoming.id);
+          if (!exists) return [incoming, ...prev];
+          return prev.map((p) => (p.id === incoming.id ? incoming : p));
+        });
+        return;
+      }
+      if (event === 'post.deleted') {
+        setPosts((prev) => prev.filter((p) => p.id !== (data as { id: number }).id));
+        return;
+      }
+      if (event === 'post.like_count') {
+        const { id: postId, like_count } = data as { id: number; like_count: number };
+        setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, like_count } : p)));
+        return;
+      }
+      if (event === 'post.solved') {
+        const { id: postId, is_solved } = data as { id: number; is_solved: boolean };
+        setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, is_solved } : p)));
+      }
+    },
+    [followState, tab, user?.username],
+  );
+
+  useRealtime('/ws/feed/', applyRealtime);
 
   // When logged out, clear the following feed
   React.useEffect(() => {

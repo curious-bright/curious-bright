@@ -1,7 +1,6 @@
 export interface ErrorPayload {
   message: string;
   code?: string;
-  details?: Record<string, string[]>;
 }
 
 type ErrorListener = (payload: ErrorPayload) => void;

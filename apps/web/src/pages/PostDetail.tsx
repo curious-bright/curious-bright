@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { useRealtime } from '../lib/realtime';
 import { useAuth } from '../state/AuthContext';
 import { useFeed, type FeedComment, type FeedPost } from '../state/FeedContext';
 import { SubjectTag } from '../components/PostCard';
@@ -45,14 +46,21 @@ function CommentThread({
           <span className="text-xs text-muted">{new Date(comment.created_at).toLocaleString()}</span>
         </div>
 
-        {comment.is_accepted && (
+        {comment.is_accepted && !comment.is_deleted && (
           <span className="badge-tag badge-teal" style={{ marginBottom: '0.4rem', display: 'inline-block' }}>
             <i className="bx bx-check-circle"></i> accepted answer
           </span>
         )}
 
-        <p className="text-sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{comment.body}</p>
+        {comment.is_deleted ? (
+          <p className="text-sm text-muted" style={{ lineHeight: 1.6, fontStyle: 'italic' }}>
+            This comment was deleted.
+          </p>
+        ) : (
+          <p className="text-sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{comment.body}</p>
+        )}
 
+        {!comment.is_deleted && (
         <div className="flex items-center gap-2" style={{ marginTop: '0.6rem', flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary"
@@ -79,8 +87,9 @@ function CommentThread({
             </button>
           )}
         </div>
+        )}
 
-        {replying && (
+        {!comment.is_deleted && replying && (
           <div style={{ marginTop: '0.6rem' }}>
             <textarea
               value={replyBody}
@@ -133,16 +142,20 @@ export default function PostDetail() {
   const [reportReason, setReportReason] = useState('');
   const [reported, setReported] = useState(false);
 
-  const loadPost = useCallback(async () => {
-    setLoading(true);
+  const loadPost = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const data = await apiFetch<FeedPost>(`/posts/${id}/`);
-    setPost(data);
-    setLoading(false);
+    if (data) setPost(data);
+    if (!silent) setLoading(false);
   }, [id]);
 
   useEffect(() => {
     void loadPost();
   }, [loadPost]);
+
+  useRealtime(id ? `/ws/posts/${id}/` : null, () => {
+    void loadPost(true);
+  });
 
   if (loading) return <CuriousLoading message="Loading discussion…" />;
   if (!post) {
@@ -168,7 +181,7 @@ export default function PostDetail() {
       body: JSON.stringify({ body, ...(parent ? { parent } : {}) }),
     });
     if (created) {
-      await loadPost();
+      await loadPost(true);
       return created;
     }
     return null;
@@ -176,17 +189,17 @@ export default function PostDetail() {
 
   const handleHelpful = async (commentId: number) => {
     await apiFetch(`/comments/${commentId}/helpful/`, { method: 'POST' });
-    await loadPost(); // counts confirmed by server; UI never reloaded a full page
+    await loadPost(true); // counts confirmed by server; UI never reloaded a full page
   };
 
   const handleAccept = async (commentId: number) => {
     await apiFetch(`/comments/${commentId}/accept/`, { method: 'POST' });
-    await loadPost();
+    await loadPost(true);
   };
 
   const handleSolve = async () => {
     await apiFetch(`/posts/${post.id}/solve/`, { method: 'POST' });
-    await loadPost();
+    await loadPost(true);
   };
 
   const handleReport = async () => {

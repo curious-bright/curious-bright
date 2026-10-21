@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/", include("apps.research.urls")),
     path("api/", include("apps.moderation.urls")),
     path("api/", include("apps.rooms.urls")),
+    path("api/", include("apps.organizations.urls")),
     path("api/search/", SearchView.as_view(), name="search"),
 ]
 

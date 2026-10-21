@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+from apps.core.models import SoftDeleteModel
 
-class Post(models.Model):
+
+class Post(SoftDeleteModel):
     class Subject(models.TextChoices):
         MATH = "math", "Math"
         SCIENCE = "science", "Science"
@@ -45,6 +47,8 @@ class Post(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        default_manager_name = "objects"
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return self.title
@@ -64,7 +68,7 @@ class Equation(models.Model):
         return self.latex[:60]
 
 
-class Comment(models.Model):
+class Comment(SoftDeleteModel):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments")
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
@@ -75,6 +79,8 @@ class Comment(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        default_manager_name = "objects"
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return f"Comment by {self.author.username} on {self.post.title}"
