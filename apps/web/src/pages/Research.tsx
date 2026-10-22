@@ -14,6 +14,9 @@ export interface ResearchDoc {
   field: string;
   status: string;
   co_authors: { username: string; role: string }[];
+  mine?: boolean;
+  can_edit?: boolean;
+  revision_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -39,10 +42,16 @@ export default function Research() {
   const [abstractText, setAbstractText] = useState('');
 
   const load = useCallback(async () => {
+    if (!isAuthenticated) {
+      setDocs([]);
+      setInvites([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [docData, inviteData] = await Promise.all([
       apiFetch<{ results: ResearchDoc[] }>('/research/'),
-      isAuthenticated ? apiFetch<{ results: Invitation[] }>('/research/invitations/') : Promise.resolve(null),
+      apiFetch<{ results: Invitation[] }>('/research/invitations/'),
     ]);
     setDocs(docData?.results || []);
     setInvites(inviteData?.results || []);
@@ -145,7 +154,7 @@ export default function Research() {
         </section>
       )}
 
-      {loading ? (
+      {!isAuthenticated ? null : loading ? (
         <CuriousLoading message="Loading research documents…" />
       ) : docs.length === 0 ? (
         <CuriousEmpty
@@ -155,9 +164,15 @@ export default function Research() {
       ) : (
         <div className="flex flex-col gap-3">
           {docs.map(doc => (
-            <Link key={doc.id} to={`/research/${doc.id}`} className="comment-corner-card" style={{ padding: '1rem 1.15rem', textDecoration: 'none', color: 'inherit', marginBottom: 0 }}>
-              <div className="flex items-center justify-between gap-2" style={{ marginBottom: '0.3rem' }}>
-                <span className="badge-tag badge-teal" style={{ fontSize: '0.62rem' }}>{doc.field || 'General'}</span>
+            <Link key={doc.id} to={`/research/${doc.id}`} className="comment-corner-card research-card" style={{ padding: '1rem 1.15rem', textDecoration: 'none', color: 'inherit', marginBottom: 0 }}>
+              <div className="flex items-center justify-between gap-2" style={{ marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                <span className="flex items-center gap-1">
+                  <span className="badge-tag badge-teal" style={{ fontSize: '0.62rem' }}>{doc.field || 'General'}</span>
+                  <span className={`badge-tag ${doc.status === 'published' ? 'badge-teal' : doc.status === 'archived' ? '' : 'badge-mustard'}`} style={{ fontSize: '0.62rem' }}>
+                    {doc.status}
+                  </span>
+                  {doc.mine && <span className="badge-tag badge-coral" style={{ fontSize: '0.62rem' }}>Owner</span>}
+                </span>
                 <span className="text-xs text-muted">updated {new Date(doc.updated_at).toLocaleDateString()}</span>
               </div>
               <div className="font-semibold" style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>{doc.title}</div>
@@ -166,9 +181,14 @@ export default function Research() {
                   {doc.abstract.length > 180 ? `${doc.abstract.slice(0, 180)}…` : doc.abstract}
                 </p>
               )}
-              <div className="text-xs mt-2" style={{ color: 'var(--color-faded-ink)' }}>
-                by @{doc.owner.username}
-                {doc.co_authors.length > 0 && <> · with {doc.co_authors.map(c => `@${c.username}`).join(', ')}</>}
+              <div className="flex items-center justify-between gap-2 text-xs mt-2" style={{ color: 'var(--color-faded-ink)', flexWrap: 'wrap' }}>
+                <span>
+                  by @{doc.owner.username}
+                  {doc.co_authors.length > 0 && <> · with {doc.co_authors.map(c => `@${c.username}`).join(', ')}</>}
+                </span>
+                {typeof doc.revision_count === 'number' && (
+                  <span><i className="bx bx-history"></i> {doc.revision_count} revision{doc.revision_count === 1 ? '' : 's'}</span>
+                )}
               </div>
             </Link>
           ))}

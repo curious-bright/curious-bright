@@ -17,9 +17,9 @@ export default function Login() {
     e.preventDefault();
     if (!identifier.trim() || !password) return;
     setLoading(true);
-    const ok = await login(identifier.trim(), password);
+    const me = await login(identifier.trim(), password);
     setLoading(false);
-    if (ok) navigate('/feed');
+    if (me) navigate(me.must_change_password ? '/settings?change-password=1' : '/feed');
   };
 
   return (

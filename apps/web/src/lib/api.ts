@@ -109,10 +109,14 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
+function resolveUrl(endpoint: string): string {
+  if (/^https?:\/\//i.test(endpoint)) return endpoint;
+  const path = endpoint.startsWith('/api/') ? endpoint : `/api${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  return `${API_URL}${path}`;
+}
+
 async function request(endpoint: string, options: RequestInit = {}, allowRetry = true): Promise<unknown> {
-  const url = endpoint.startsWith('/api/') || endpoint.startsWith('http')
-    ? endpoint
-    : `${API_URL}/api${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = resolveUrl(endpoint);
 
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -144,23 +148,84 @@ async function request(endpoint: string, options: RequestInit = {}, allowRetry =
   return response.text();
 }
 
+function reportError(err: unknown): void {
+  if (err instanceof ApiError) {
+    showError(err.message, { code: err.code });
+    if (err.code === 'unauthenticated' || err.status === 401) {
+      clearTokens();
+    }
+    return;
+  }
+  showError('Something went wrong. Please try again.');
+}
+
 /**
- * The single API wrapper. Catches every failure, surfaces it through the
- * global error alert, and resolves with `null` so calling components need
- * no individual try/catch.
+ * Fetch a JSON resource. Failures are surfaced through the global alert and
+ * resolve to `null`. Use `apiVoid` for endpoints whose success body is empty
+ * (204), and `apiDownload` for file attachments.
  */
 export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   try {
     return (await request(endpoint, options)) as T;
   } catch (err) {
+    reportError(err);
+    return null;
+  }
+}
+
+/**
+ * Run a mutating request where only success/failure matters. Unlike
+ * `apiFetch`, a 204 success returns `true` rather than `null`.
+ */
+export async function apiVoid(endpoint: string, options: RequestInit = {}): Promise<boolean> {
+  try {
+    await request(endpoint, options);
+    return true;
+  } catch (err) {
+    reportError(err);
+    return false;
+  }
+}
+
+/**
+ * Download an authenticated file (account export, CSV template/export).
+ * Returns false when the request failed and the error was already surfaced.
+ */
+export async function apiDownload(endpoint: string, fallbackName = 'download'): Promise<boolean> {
+  const url = resolveUrl(endpoint);
+  const headers = new Headers();
+  const token = getAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  try {
+    let response = await fetch(url, { headers, credentials: 'omit' });
+    if (response.status === 401 && (await tryRefresh())) {
+      const refreshed = getAccessToken();
+      if (refreshed) headers.set('Authorization', `Bearer ${refreshed}`);
+      response = await fetch(url, { headers, credentials: 'omit' });
+    }
+    if (!response.ok) throw await parseError(response);
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    const filename = match ? decodeURIComponent(match[1].trim()) : fallbackName;
+
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+    return true;
+  } catch (err) {
     if (err instanceof ApiError) {
       showError(err.message, { code: err.code });
-      if (err.code === 'unauthenticated' || err.status === 401) {
-        clearTokens();
-      }
-      return null;
+    } else {
+      showError('Could not download that file. Please try again.');
     }
-    showError('Something went wrong. Please try again.');
-    return null;
+    return false;
   }
 }

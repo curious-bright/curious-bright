@@ -97,8 +97,8 @@ export default function Search() {
         <div className="flex flex-col gap-8">
           {/* Posts Section */}
           <section>
-            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem' }}>
-              {'\uD83D\uDCD6 Papers & Notes'} ({results.posts.length})
+            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <i className="bx bx-book-open" style={{ color: 'var(--color-teal)' }}></i> Papers & notes ({results.posts.length})
             </h3>
             {results.posts.length > 0 ? (
               <div className="grid-container">
@@ -138,8 +138,8 @@ export default function Search() {
 
           {/* Rooms Section */}
           <section>
-            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem' }}>
-              {'\uD83D\uDCAC Study Rooms'} ({results.rooms.length})
+            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <i className="bx bx-video" style={{ color: 'var(--color-coral)' }}></i> Study rooms ({results.rooms.length})
             </h3>
             {results.rooms.length > 0 ? (
               <div className="grid-container">
@@ -167,8 +167,8 @@ export default function Search() {
 
           {/* Users Section */}
           <section>
-            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem' }}>
-              {'\uD83D\uDC65 Co-authors & Scholars'} ({results.users.length})
+            <h3 className="mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <i className="bx bx-group" style={{ color: 'var(--color-mustard)' }}></i> Co-authors & scholars ({results.users.length})
             </h3>
             {results.users.length > 0 ? (
               <div className="grid-container">

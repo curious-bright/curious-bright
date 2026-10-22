@@ -97,6 +97,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
         {navLink('/research', 'bx bx-transfer-alt', 'Research Studio')}
         {navLink('/notifications', 'bx bx-bell', 'Notifications', unreadCount)}
         {isAuthenticated && user ? navLink(`/profile/${user.username}`, 'bx bx-user', 'My Profile') : null}
+        {isAuthenticated ? navLink('/settings', 'bx bx-cog', 'Account Settings') : null}
 
         <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
           Library
@@ -149,9 +150,12 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
                   fontWeight: 700,
                   fontSize: '0.875rem',
                   flexShrink: 0,
+                  ...(user.profile?.avatar
+                    ? { backgroundImage: `url(${user.profile.avatar})`, backgroundSize: 'cover' }
+                    : {}),
                 }}
               >
-                {user.username?.[0]?.toUpperCase() || 'U'}
+                {!user.profile?.avatar && (user.username?.[0]?.toUpperCase() || 'U')}
               </div>
               <div style={{ overflow: 'hidden' }}>
                 <div className="font-semibold text-xs text-truncate" style={{ color: 'var(--color-ink)' }}>

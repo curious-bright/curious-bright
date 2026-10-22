@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../state/AuthContext';
@@ -34,7 +34,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 export default function Profile() {
   const { username } = useParams<{ username: string }>();
   const { user, isAuthenticated, updateProfile } = useAuth();
-  const { toggleFollow, isFollowing, loadFeed } = useFeed();
+  const { toggleFollow, followStatus, loadFeed } = useFeed();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,19 +42,26 @@ export default function Profile() {
   const [bio, setBio] = useState('');
   const [expertise, setExpertise] = useState('');
   const [followSeeded, setFollowSeeded] = useState(false);
+  const requestRef = useRef(0);
 
   const isMe = user?.username === username;
 
   const load = useCallback(async () => {
+    const requestId = ++requestRef.current;
     setLoading(true);
+    // Navigation between two profiles reuses this component; never let the
+    // previous member's follow state leak into the new profile.
+    setFollowSeeded(false);
     const [profileData, postData] = await Promise.all([
       apiFetch<ProfileData>(`/auth/profiles/${username}/`),
       apiFetch<{ results: FeedPost[] }>(`/posts/?author=${encodeURIComponent(username || '')}`),
     ]);
+    if (requestId !== requestRef.current) return;
     setProfile(profileData);
     setPosts(postData?.results || []);
     if (profileData && !isMe) {
       const status = await apiFetch<{ following: boolean }>(`/auth/profiles/${username}/is-following/`);
+      if (requestId !== requestRef.current) return;
       if (status) setFollowSeeded(status.following);
     }
     setLoading(false);
@@ -67,7 +74,7 @@ export default function Profile() {
   if (loading) return <CuriousLoading message="Loading profile…" />;
   if (!profile) return <CuriousEmpty title="Profile not found" description="This member may have been deactivated." />;
 
-  const following = isMe ? false : isFollowing(username || '') || followSeeded;
+  const following = isMe ? false : (followStatus(username || '') ?? followSeeded);
 
   const startEdit = () => {
     setBio(profile.bio);
@@ -120,7 +127,7 @@ export default function Profile() {
               className={`btn ${following ? 'btn-secondary' : 'btn-primary'}`}
               style={{ padding: '0.45rem 1.2rem' }}
               onClick={async () => {
-                const nowFollowing = await toggleFollow(profile.username);
+                const nowFollowing = await toggleFollow(profile.username, following);
                 setFollowSeeded(nowFollowing);
                 if (nowFollowing) await loadFeed('following', 1);
               }}

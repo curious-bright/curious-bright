@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { FeedPost } from '../state/FeedContext';
 import { useFeed } from '../state/FeedContext';
@@ -10,6 +11,12 @@ const SUBJECT_COLORS: Record<string, string> = {
   language: '#B45CC8',
   research: '#F4B43D',
   general: '#6B685C',
+};
+
+const VISIBILITY_META: Record<string, { icon: string; label: string }> = {
+  public: { icon: 'bx-world', label: 'Public' },
+  followers: { icon: 'bx-group', label: 'Followers' },
+  room_only: { icon: 'bx-lock-alt', label: 'Room only' },
 };
 
 export function SubjectTag({ subject }: { subject: string }) {
@@ -28,42 +35,49 @@ export function SubjectTag({ subject }: { subject: string }) {
 }
 
 export default function PostCard({ post }: { post: FeedPost }) {
-  const { toggleLike, toggleFollow, isFollowing } = useFeed();
+  const { toggleLike, toggleFollow, followStatus, deletePost } = useFeed();
   const { user, isAuthenticated } = useAuth();
-  const following = isFollowing(post.author.username);
-  const isMine = user?.username === post.author.username;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const following = followStatus(post.author.username) ?? !!post.is_following_author;
+  const isMine = post.mine ?? user?.username === post.author.username;
+  const canEdit = post.can_edit ?? isMine;
+  const canDelete = post.can_delete ?? (isMine || !!user?.can_moderate);
+  const visibility = VISIBILITY_META[post.visibility] || VISIBILITY_META.public;
+  const pendingReview = post.review_status && post.review_status !== 'published';
+
+  const handleDelete = async () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setDeleting(true);
+    const ok = await deletePost(post.id, post);
+    setDeleting(false);
+    if (!ok) setConfirmingDelete(false);
+  };
 
   return (
-    <article
-      className="comment-corner-card"
-      style={{ padding: '1.1rem 1.2rem', marginBottom: '1rem', display: 'block' }}
-    >
-      <div className="flex items-center justify-between gap-2" style={{ marginBottom: '0.6rem' }}>
+    <article className="comment-corner-card post-card">
+      <div className="post-card-head">
         <Link
           to={`/profile/${post.author.username}`}
-          className="flex items-center gap-2"
-          style={{ textDecoration: 'none', color: 'var(--color-ink)', minWidth: 0 }}
+          className="post-author"
+          aria-label={`View ${post.author.username}'s profile`}
         >
           <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: '3px 0 3px 3px',
-              background: 'var(--color-teal)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              flexShrink: 0,
-              ...(post.author.profile?.avatar ? { backgroundImage: `url(${post.author.profile.avatar})`, backgroundSize: 'cover' } : {}),
-            }}
+            className="post-avatar"
+            style={
+              post.author.profile?.avatar
+                ? { backgroundImage: `url(${post.author.profile.avatar})`, backgroundSize: 'cover' }
+                : undefined
+            }
           >
-            {post.author.username[0]?.toUpperCase()}
+            {!post.author.profile?.avatar && post.author.username[0]?.toUpperCase()}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div className="font-semibold text-sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="post-author-name">
               {post.author.username}
               {post.author.profile?.badge_count ? (
                 <span className="badge-tag badge-mustard" style={{ marginLeft: '0.4rem', fontSize: '0.6rem' }}>
@@ -71,75 +85,130 @@ export default function PostCard({ post }: { post: FeedPost }) {
                 </span>
               ) : null}
             </div>
-            <div className="text-xs text-muted">
-              {new Date(post.created_at).toLocaleDateString()}
+            <div className="text-xs text-muted post-date">
+              {new Date(post.created_at).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+              {post.is_edited ? <span className="post-edited"> · edited</span> : null}
             </div>
           </div>
         </Link>
-        {isAuthenticated && !isMine && (
-          <button
-            className={`btn ${following ? 'btn-secondary' : 'btn-primary'}`}
-            style={{ padding: '0.3rem 0.7rem', fontSize: '0.72rem', flexShrink: 0 }}
-            onClick={() => void toggleFollow(post.author.username)}
-          >
-            {following ? 'Following' : 'Follow'}
-          </button>
-        )}
+
+        <div className="post-card-actions">
+          <span className={`post-visibility visibility-${post.visibility}`} title={visibility.label}>
+            <i className={`bx ${visibility.icon}`}></i>
+            <span>{visibility.label}</span>
+          </span>
+
+          {canEdit && (
+            <Link
+              to={`/post/${post.id}?edit=1`}
+              className="icon-action"
+              title="Edit post"
+              aria-label="Edit post"
+            >
+              <i className="bx bx-edit-alt"></i>
+            </Link>
+          )}
+
+          {canDelete && (
+            <button
+              type="button"
+              className={`icon-action danger ${confirmingDelete ? 'confirming' : ''}`}
+              title={confirmingDelete ? 'Click again to delete' : 'Delete post'}
+              aria-label={confirmingDelete ? 'Confirm delete post' : 'Delete post'}
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+              onBlur={() => setConfirmingDelete(false)}
+            >
+              {confirmingDelete ? (
+                <span className="confirm-label">{deleting ? 'Deleting…' : 'Confirm?'}</span>
+              ) : (
+                <i className="bx bx-trash"></i>
+              )}
+            </button>
+          )}
+
+          {isAuthenticated && !isMine && (
+            <button
+              type="button"
+              className={`btn ${following ? 'btn-secondary' : 'btn-primary'} post-follow-btn`}
+              onClick={() => void toggleFollow(post.author.username, following)}
+            >
+              {following ? 'Following' : 'Follow'}
+            </button>
+          )}
+        </div>
       </div>
 
-      <Link to={`/post/${post.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-        <div className="flex items-center gap-2" style={{ marginBottom: '0.35rem' }}>
+      <Link to={`/post/${post.id}`} className="post-body-link">
+        <div className="post-tags">
           <SubjectTag subject={post.subject} />
           <span className="badge-tag badge-coral" style={{ fontSize: '0.62rem' }}>{post.kind}</span>
           {post.is_solved && (
-            <span className="badge-tag badge-teal" style={{ fontSize: '0.62rem' }}>solved</span>
+            <span className="badge-tag badge-teal" style={{ fontSize: '0.62rem' }}>
+              <i className="bx bx-check-circle"></i> solved
+            </span>
+          )}
+          {pendingReview && (
+            <span className="badge-tag badge-mustard" style={{ fontSize: '0.62rem' }}>
+              <i className="bx bx-time-five"></i> in review
+            </span>
+          )}
+          {post.room_name && (
+            <span className="badge-tag" style={{ fontSize: '0.62rem' }}>
+              <i className="bx bx-door-open"></i> {post.room_name}
+            </span>
           )}
         </div>
-        <h3 style={{ fontSize: '1.02rem', fontWeight: 700, marginBottom: '0.35rem', lineHeight: 1.3 }}>{post.title}</h3>
-        <p className="text-sm text-muted" style={{ lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+
+        <h3 className="post-title">{post.title}</h3>
+        <p className="post-excerpt">
           {post.body.length > 320 ? `${post.body.slice(0, 320)}…` : post.body}
         </p>
+
         {post.equations && post.equations.length > 0 && (
-          <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {post.equations.map(eq => (
-              <code
-                key={eq.id}
-                style={{
-                  fontFamily: "'Courier New', monospace",
-                  fontSize: '0.8rem',
-                  background: 'var(--color-paper)',
-                  border: '1px solid var(--color-line)',
-                  borderRadius: 4,
-                  padding: '0.3rem 0.55rem',
-                  display: 'inline-block',
-                  color: 'var(--color-ink)',
-                }}
-              >
+          <div className="post-equations">
+            {post.equations.map((eq) => (
+              <code key={eq.id}>
                 {eq.latex}
                 {eq.description ? <span className="text-muted"> — {eq.description}</span> : null}
               </code>
             ))}
           </div>
         )}
+
+        {post.attachment_url && (
+          <span className="post-attachment">
+            <i className="bx bx-paperclip"></i>
+            {post.attachment_name || 'Attached paper'}
+          </span>
+        )}
       </Link>
 
-      <div className="flex items-center gap-3" style={{ marginTop: '0.75rem', paddingTop: '0.6rem', borderTop: '1.5px solid var(--color-line)' }}>
+      <div className="post-card-foot">
         <button
-          className="btn btn-secondary"
-          style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', color: post.liked_by_me ? 'var(--color-coral)' : undefined }}
+          type="button"
+          className={`btn btn-secondary post-stat ${post.liked_by_me ? 'is-liked' : ''}`}
           onClick={() => void toggleLike(post.id)}
           disabled={!isAuthenticated}
           aria-pressed={post.liked_by_me}
+          aria-label={`${post.like_count} likes`}
         >
-          <i className={post.liked_by_me ? 'bx bx-heart' : 'bx bx-heart'}></i> {post.like_count}
+          <i className={post.liked_by_me ? 'bx bxs-heart' : 'bx bx-heart'}></i>
+          <span>{post.like_count}</span>
         </button>
-        <Link
-          to={`/post/${post.id}`}
-          className="btn btn-secondary"
-          style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', textDecoration: 'none' }}
-        >
-          <i className="bx bx-message-rounded"></i> {post.comment_count}
+        <Link to={`/post/${post.id}`} className="btn btn-secondary post-stat" aria-label={`${post.comment_count} comments`}>
+          <i className="bx bx-message-rounded"></i>
+          <span>{post.comment_count}</span>
         </Link>
+        {post.room && (
+          <Link to={`/room/${post.room}`} className="post-room-link">
+            Open study room <i className="bx bx-right-arrow-alt"></i>
+          </Link>
+        )}
       </div>
     </article>
   );

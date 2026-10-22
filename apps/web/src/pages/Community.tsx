@@ -4,15 +4,20 @@ import { apiFetch, resultsOf } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import { CuriousLoading, CuriousEmpty } from '../components/CuriousStates';
+import Modal from '../components/Modal';
 import { useAuth } from '../state/AuthContext';
 
 interface Room {
   id: number;
   name: string;
   topic: string;
+  description?: string;
   member_count: number;
   created_by?: string | null;
   created_at: string;
+  is_member?: boolean;
+  mine?: boolean;
+  can_edit?: boolean;
 }
 
 export default function Community() {
@@ -23,9 +28,15 @@ export default function Community() {
 
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomTopic, setNewRoomTopic] = useState('');
+  const [newRoomDescription, setNewRoomDescription] = useState('');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     const fetchRooms = async () => {
       const data = await apiFetch<{ count: number; results: Room[] }>('/rooms/');
@@ -33,11 +44,11 @@ export default function Community() {
       setRooms(resultsOf<Room>(data));
       setLoading(false);
     };
-    fetchRooms();
+    void fetchRooms();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   if (!authLoading && !isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -53,6 +64,7 @@ export default function Community() {
       body: JSON.stringify({
         name: newRoomName.trim(),
         topic: newRoomTopic.trim() || 'General Study',
+        description: newRoomDescription.trim(),
       }),
     });
     setCreating(false);
@@ -61,6 +73,7 @@ export default function Community() {
       setShowCreateModal(false);
       setNewRoomName('');
       setNewRoomTopic('');
+      setNewRoomDescription('');
       setRooms(prev => [created, ...prev]);
     }
   };
@@ -115,25 +128,29 @@ export default function Community() {
                   <span className="badge-tag badge-mustard">
                     {room.topic || 'General Topic'}
                   </span>
-                  <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem' }}>
-                    {room.member_count} member{room.member_count === 1 ? '' : 's'}
+                  <span className="flex items-center gap-1">
+                    {room.mine && <span className="badge-tag badge-coral" style={{ fontSize: '0.625rem' }}>Host</span>}
+                    {!room.mine && room.is_member && <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem' }}>Joined</span>}
+                    <span className="badge-tag badge-teal" style={{ fontSize: '0.625rem' }}>
+                      {room.member_count} member{room.member_count === 1 ? '' : 's'}
+                    </span>
                   </span>
                 </div>
 
                 <h3 className="mb-2" style={{ fontSize: '1.15rem' }}>{room.name}</h3>
 
                 <p className="text-muted text-sm mb-4">
-                  A shared study space with live message chat, an always-visible member list, and join-anytime access.
+                  {room.description || 'A shared study space with live message chat, an always-visible member list, and join-anytime access.'}
                 </p>
               </div>
 
               <div className="flex justify-between items-center pt-4" style={{ borderTop: '1.5px solid var(--color-line)' }}>
                 <span className="text-xs text-muted font-medium flex items-center gap-1">
-                  <i className="bx bx-group" style={{ fontSize: '0.95rem' }}></i>
-                  Open Access
+                  {room.mine ? <i className="bx bx-crown" style={{ fontSize: '0.95rem' }}></i> : <i className="bx bx-group" style={{ fontSize: '0.95rem' }}></i>}
+                  {room.mine ? 'You host this room' : 'Open access'}
                 </span>
                 <Link to={`/room/${room.id}`} className="btn btn-primary" style={{ padding: '0.45rem 0.95rem', fontSize: '0.8125rem' }}>
-                  <span>Join Room</span>
+                  <span>{room.is_member ? 'Open room' : 'Join room'}</span>
                   <i className="bx bx-right-arrow-alt" style={{ fontSize: '1.1rem' }}></i>
                 </Link>
               </div>
@@ -142,85 +159,76 @@ export default function Community() {
         </div>
       )}
 
-      {/* Create Room Modal with Boxicons */}
       {showCreateModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(20, 20, 26, 0.45)',
-            backdropFilter: 'blur(3px)',
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-          }}
-          onClick={() => setShowCreateModal(false)}
+        <Modal
+          title="Create a study room"
+          eyebrow="Start a shared workspace"
+          icon="bx-conversation"
+          onClose={() => setShowCreateModal(false)}
+          footer={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="create-room-form"
+                className="btn btn-primary"
+                disabled={!newRoomName.trim() || creating}
+              >
+                {creating ? (
+                  <><i className="bx bx-loader-alt bx-spin"></i> Creating…</>
+                ) : (
+                  <><i className="bx bx-plus-circle"></i> Create room</>
+                )}
+              </button>
+            </>
+          }
         >
-          <div onClick={e => e.stopPropagation()} style={{ maxWidth: '460px', width: '100%' }}>
-            <CommentCornerCard style={{ padding: '1.75rem' }}>
-              <div className="flex justify-between items-center mb-4 pb-2" style={{ borderBottom: '1.5px solid var(--color-line)' }}>
-                <h3 style={{ fontSize: '1.2rem' }} className="flex items-center gap-1.5">
-                  <i className="bx bx-conversation" style={{ fontSize: '1.25rem' }}></i>
-                  Create Study Room
-                </h3>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowCreateModal(false)}
-                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                >
-                  <i className="bx bx-x" style={{ fontSize: '1.1rem' }}></i>
-                </button>
-              </div>
+          <form
+            id="create-room-form"
+            onSubmit={handleCreateRoom}
+            style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}
+          >
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="new-room-name">Room name</label>
+              <input
+                id="new-room-name"
+                type="text"
+                placeholder="e.g. Quantum Physics Chapter 3"
+                value={newRoomName}
+                maxLength={120}
+                onChange={e => setNewRoomName(e.target.value)}
+                required
+              />
+            </div>
 
-              <form onSubmit={handleCreateRoom} className="flex flex-col gap-4">
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Room Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Quantum Physics Chapter 3 Discussion"
-                    value={newRoomName}
-                    onChange={e => setNewRoomName(e.target.value)}
-                    required
-                  />
-                </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="new-room-topic">Subject or topic tag</label>
+              <input
+                id="new-room-topic"
+                type="text"
+                placeholder="e.g. Physics, Literature, Organic Chemistry"
+                value={newRoomTopic}
+                maxLength={80}
+                onChange={e => setNewRoomTopic(e.target.value)}
+              />
+            </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Subject or Topic Tag
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Physics, Literature, Organic Chemistry"
-                    value={newRoomTopic}
-                    onChange={e => setNewRoomTopic(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 mt-4 pt-3" style={{ borderTop: '1.5px solid var(--color-line)' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={!newRoomName.trim() || creating}>
-                    {creating ? (
-                      <span className="flex items-center gap-2">
-                        <i className="bx bx-loader-alt bx-spin"></i> Creating...
-                      </span>
-                    ) : (
-                      <span>
-                        Create Room
-                        <i className="bx bx-right-arrow-alt" style={{ fontSize: '1.1rem', marginLeft: '0.35rem' }}></i>
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </CommentCornerCard>
-          </div>
-        </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="new-room-description">What will you work on?</label>
+              <textarea
+                id="new-room-description"
+                rows={3}
+                placeholder="A short note that helps the right people find and join this room."
+                value={newRoomDescription}
+                maxLength={500}
+                onChange={e => setNewRoomDescription(e.target.value)}
+              />
+              <span className="field-hint">Optional · visible on the room card</span>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

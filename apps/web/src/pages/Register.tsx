@@ -18,9 +18,9 @@ export default function Register() {
     e.preventDefault();
     if (!username.trim() || !email.trim() || !password) return;
     setLoading(true);
-    const ok = await register(username.trim(), email.trim(), password);
+    const me = await register(username.trim(), email.trim(), password);
     setLoading(false);
-    if (ok) navigate('/feed');
+    if (me) navigate('/feed');
   };
 
   return (

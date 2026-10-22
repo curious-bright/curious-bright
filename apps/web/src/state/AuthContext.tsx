@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { apiFetch, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../lib/api';
+import { apiFetch, apiVoid, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../lib/api';
 
 export interface BadgeInfo {
   code: string;
@@ -18,7 +18,10 @@ export interface Me {
     email: string;
     bio: string;
     avatar: string;
+    avatar_url?: string;
     subject_expertise: string;
+    country: string;
+    school: string;
     post_count: number;
     followers_count: number;
     following_count: number;
@@ -28,17 +31,27 @@ export interface Me {
   };
   is_moderator: boolean;
   can_moderate: boolean;
+  must_change_password: boolean;
 }
+
+export type ProfilePatch = Partial<{
+  bio: string;
+  avatar: string;
+  subject_expertise: string;
+  country: string;
+  school: string;
+}>;
 
 interface AuthContextValue {
   user: Me | null;
   loading: boolean;
   isAuthenticated: boolean;
-  login: (identifier: string, password: string) => Promise<boolean>;
-  register: (username: string, email: string, password: string) => Promise<boolean>;
+  login: (identifier: string, password: string) => Promise<Me | null>;
+  register: (username: string, email: string, password: string) => Promise<Me | null>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
-  updateProfile: (patch: Partial<{ bio: string; avatar: string; subject_expertise: string }>) => Promise<void>;
+  updateProfile: (patch: ProfilePatch, avatarFile?: File | null) => Promise<boolean>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -68,26 +81,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshMe]);
 
   const login = useCallback(
-    async (identifier: string, password: string): Promise<boolean> => {
+    async (identifier: string, password: string): Promise<Me | null> => {
       const data = await apiFetch<{ access: string; refresh: string }>('/auth/token/', {
         method: 'POST',
         body: JSON.stringify({ username: identifier, password }),
       });
-      if (!data?.access) return false;
+      if (!data?.access) return null;
       setTokens(data.access, data.refresh);
-      await refreshMe();
-      return true;
+      const me = await apiFetch<Me>('/auth/me/');
+      if (!me) {
+        clearTokens();
+        setUser(null);
+        return null;
+      }
+      setUser(me);
+      setLoading(false);
+      localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
+      return me;
     },
-    [refreshMe],
+    [],
   );
 
   const register = useCallback(
-    async (username: string, email: string, password: string): Promise<boolean> => {
+    async (username: string, email: string, password: string): Promise<Me | null> => {
       const created = await apiFetch<{ id: number }>('/auth/register/', {
         method: 'POST',
         body: JSON.stringify({ username, email, password }),
       });
-      if (!created) return false;
+      if (!created) return null;
       return login(username, password);
     },
     [login],
@@ -96,7 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const refresh = getRefreshToken();
     if (refresh && getAccessToken()) {
-      await apiFetch('/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh }) });
+      // A revoked/expired token must never prevent the local sign-out.
+      await apiVoid('/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh }) });
     }
     clearTokens();
     localStorage.removeItem('user');
@@ -104,11 +126,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateProfile = useCallback(
-    async (patch: Partial<{ bio: string; avatar: string; subject_expertise: string }>) => {
-      const updated = await apiFetch<Me>('/auth/me/', { method: 'PATCH', body: JSON.stringify(patch) });
-      if (updated) setUser(updated);
+    async (patch: ProfilePatch, avatarFile?: File | null): Promise<boolean> => {
+      let body: BodyInit;
+      if (avatarFile) {
+        const form = new FormData();
+        for (const [key, value] of Object.entries(patch)) {
+          if (value !== undefined) form.append(key, value);
+        }
+        form.append('avatar_file', avatarFile);
+        body = form;
+      } else {
+        body = JSON.stringify(patch);
+      }
+      const updated = await apiFetch<Me>('/auth/me/', { method: 'PATCH', body });
+      if (!updated) return false;
+      setUser(updated);
+      return true;
     },
     [],
+  );
+
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string): Promise<boolean> => {
+      const ok = await apiVoid('/auth/change-password/', {
+        method: 'POST',
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
+      if (ok) await refreshMe();
+      return ok;
+    },
+    [refreshMe],
   );
 
   const value = useMemo(
@@ -121,8 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       refreshMe,
       updateProfile,
+      changePassword,
     }),
-    [user, loading, login, register, logout, refreshMe, updateProfile],
+    [user, loading, login, register, logout, refreshMe, updateProfile, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

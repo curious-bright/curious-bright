@@ -1,271 +1,260 @@
 import { Link } from 'react-router-dom';
+import { HighlighterText } from '../components/HighlighterText';
 
 const features = [
   {
-    icon: '📚',
+    icon: 'bx-library',
     title: 'Open Library',
-    desc: 'Access thousands of curated research papers, textbooks, and academic resources — freely available to all members.',
+    desc: 'Access a growing collection of shared papers, study notes and open resources — free for every member.',
   },
   {
-    icon: '💬',
+    icon: 'bx-video',
     title: 'Study Rooms',
-    desc: 'Join real-time collaborative study rooms with live video, audio, and interactive whiteboards for group learning.',
+    desc: 'Join real-time collaborative rooms with room chat, live video and a shared whiteboard for group learning.',
   },
   {
-    icon: '✏️',
+    icon: 'bx-pen',
     title: 'Live Whiteboard',
-    desc: 'Draw, annotate, and brainstorm together on a shared digital canvas — perfect for explaining complex concepts.',
+    desc: 'Draw, annotate and brainstorm together on one canvas — perfect for working through a tricky concept.',
   },
   {
-    icon: '📤',
-    title: 'Submit Research',
-    desc: 'Contribute your own papers and research to the community. Every submission goes through a moderation review.',
+    icon: 'bx-upload',
+    title: 'Share Research',
+    desc: 'Contribute your own papers and notes. Every shared paper enters a clear peer-review queue.',
   },
   {
-    icon: '🛡️',
+    icon: 'bx-shield-quarter',
     title: 'Moderated Content',
-    desc: 'Our expert moderation team ensures all content meets academic standards before it reaches the library.',
+    desc: 'A community review team keeps the notebook accurate, useful and welcoming for everyone.',
   },
   {
-    icon: '🔍',
-    title: 'Smart Search',
-    desc: 'Powered by Typesense, our full-text search finds the exact papers and resources you need — instantly.',
+    icon: 'bx-search',
+    title: 'Unified Search',
+    desc: 'Find papers, study rooms and co-authors in one place, with results filtered to what you are allowed to see.',
   },
 ];
 
 const stats = [
-  { value: '10,000+', label: 'Research Papers' },
-  { value: '500+', label: 'Active Study Rooms' },
-  { value: '25,000+', label: 'Learners Worldwide' },
-  { value: '98%', label: 'Content Accuracy' },
+  { value: 'Open', label: 'Access for every learner', accent: 'var(--color-teal)' },
+  { value: 'Live', label: 'Rooms, chat and whiteboards', accent: 'var(--color-coral)' },
+  { value: 'Shared', label: 'Notes and research papers', accent: 'var(--color-mustard)' },
+  { value: 'Reviewed', label: 'Community peer review', accent: 'var(--color-teal)' },
+];
+
+const steps = [
+  { step: '01', title: 'Create your account', desc: 'Sign up free in under a minute. No card required.' },
+  { step: '02', title: 'Explore the library', desc: 'Browse papers and notes across disciplines, or search for exactly what you need.' },
+  { step: '03', title: 'Join a study room', desc: 'Talk through problems with video, room chat and a shared whiteboard.' },
+  { step: '04', title: 'Contribute and grow', desc: 'Share your own work, help others learn and build your academic reputation.' },
 ];
 
 const team = [
-  { name: 'Research Curation', role: 'Library & Content', emoji: '📖' },
-  { name: 'Platform Engineering', role: 'Infrastructure & Dev', emoji: '⚙️' },
-  { name: 'Community Moderation', role: 'Trust & Safety', emoji: '🛡️' },
-  { name: 'Academic Partnerships', role: 'Institutions & Outreach', emoji: '🤝' },
+  { icon: 'bx-book-open', name: 'Research Curation', role: 'Library & content' },
+  { icon: 'bx-code-alt', name: 'Platform Engineering', role: 'Infrastructure & development' },
+  { icon: 'bx-shield-quarter', name: 'Community Moderation', role: 'Trust & safety' },
+  { icon: 'bx-handshake', name: 'Academic Partnerships', role: 'Institutions & outreach' },
 ];
 
 export default function About() {
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', paddingBottom: '4rem' }} className="animate-fade-in">
-
-      {/* Hero */}
-      <section style={{ textAlign: 'center', marginBottom: '4rem', paddingTop: '1rem' }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-          padding: '0.4rem 1rem',
-          background: 'rgba(99,102,241,0.1)',
-          border: '1px solid rgba(99,102,241,0.25)',
-          borderRadius: 'var(--radius-full)',
-          fontSize: '0.8rem', fontWeight: 600, color: '#a5b4fc',
-          marginBottom: '1.5rem',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-        }}>
-          ✨ Open Academic Platform
-        </div>
-
-        <h1 style={{
-          fontSize: 'clamp(2rem, 5vw, 3.25rem)',
-          fontWeight: 900,
-          letterSpacing: '-0.04em',
-          lineHeight: 1.1,
-          marginBottom: '1.25rem',
-          background: 'linear-gradient(135deg, #f3f4f6 0%, #a5b4fc 50%, #c084fc 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>
-          Where Curiosity Meets<br />Bright Ideas
+    <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: '4rem' }} className="animate-fade-in">
+      <section style={{ textAlign: 'center', marginBottom: '3rem', paddingTop: '1rem' }}>
+        <span className="badge-tag badge-coral" style={{ display: 'inline-block', marginBottom: '1.25rem' }}>
+          <i className="bx bx-sparkles" style={{ marginRight: 4 }}></i> Open academic platform
+        </span>
+        <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.12, marginBottom: '1.1rem' }}>
+          Where curiosity meets
+          <br />
+          <HighlighterText color="var(--color-mustard)">bright ideas.</HighlighterText>
         </h1>
-
-        <p style={{
-          fontSize: '1.1rem',
-          color: 'var(--text-secondary)',
-          maxWidth: 580,
-          margin: '0 auto 2rem',
-          lineHeight: 1.7,
-        }}>
-          CuriousBright is a collaborative academic platform built for students, researchers,
-          and lifelong learners to discover, share, and study together — in real time.
+        <p className="text-muted" style={{ fontSize: '1.05rem', maxWidth: 620, margin: '0 auto 1.9rem', lineHeight: 1.7 }}>
+          Curious Bright is a collaborative academic platform for students, researchers and lifelong
+          learners to discover, share and study together — in real time.
         </p>
-
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link to="/browse" id="about-explore-library" className="btn btn-primary" style={{ padding: '0.75rem 1.75rem', fontSize: '0.9375rem' }}>
-            Explore the Library →
+        <div className="flex justify-center gap-3" style={{ flexWrap: 'wrap' }}>
+          <Link to="/browse" id="about-explore-library" className="btn btn-primary" style={{ padding: '0.75rem 1.75rem' }}>
+            Explore the library <i className="bx bx-right-arrow-alt"></i>
           </Link>
-          <Link to="/register" id="about-join-free" className="btn btn-secondary" style={{ padding: '0.75rem 1.75rem', fontSize: '0.9375rem' }}>
-            Join for Free
+          <Link to="/register" id="about-join-free" className="btn btn-secondary" style={{ padding: '0.75rem 1.75rem' }}>
+            Join for free
           </Link>
         </div>
       </section>
 
-      {/* Stats row */}
-      <section style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-        gap: '1rem',
-        marginBottom: '3.5rem',
-      }}>
+      <section
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+          gap: '1rem',
+          marginBottom: '3rem',
+        }}
+      >
         {stats.map((stat) => (
-          <div key={stat.label} className="glass-card" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
-            <div style={{
-              fontSize: '1.875rem',
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #a5b4fc, #6366f1)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              letterSpacing: '-0.03em',
-              marginBottom: '0.25rem',
-            }}>
+          <div key={stat.label} className="glass-card" style={{ padding: '1.35rem 1rem', textAlign: 'center' }}>
+            <div
+              className="font-display"
+              style={{ fontSize: '1.75rem', fontWeight: 800, color: stat.accent, letterSpacing: '-0.03em', marginBottom: '0.2rem' }}
+            >
               {stat.value}
             </div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+            <div className="text-xs text-muted" style={{ fontWeight: 700 }}>
               {stat.label}
             </div>
           </div>
         ))}
       </section>
 
-      {/* Mission */}
-      <section className="glass-card" style={{ marginBottom: '3rem', padding: '2.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 'var(--radius-md)', flexShrink: 0,
-            background: 'linear-gradient(135deg, var(--accent), #8b5cf6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.5rem',
-            boxShadow: '0 8px 24px var(--accent-glow)',
-          }}>
-            🎯
+      <section className="glass-card" style={{ marginBottom: '2rem', padding: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              width: 54,
+              height: 54,
+              borderRadius: '6px 0 6px 6px',
+              flexShrink: 0,
+              background: 'rgba(255, 90, 54, 0.1)',
+              border: '1.5px solid rgba(255, 90, 54, 0.25)',
+              color: 'var(--color-coral)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.5rem',
+            }}
+          >
+            <i className="bx bx-target-lock"></i>
           </div>
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <h2 style={{ marginBottom: '0.75rem', fontSize: '1.375rem' }}>Our Mission</h2>
-            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.75, marginBottom: '1rem' }}>
-              Knowledge should be accessible to everyone — not locked behind paywalls or institutional barriers.
-              CuriousBright was founded on the belief that collaborative learning accelerates discovery. We provide
-              a free, open platform where academic research meets real-time community.
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <h2 style={{ marginBottom: '0.7rem', fontSize: '1.35rem' }}>Our mission</h2>
+            <p className="text-muted" style={{ lineHeight: 1.75, marginBottom: '0.9rem' }}>
+              Knowledge should be accessible to everyone — not locked behind paywalls or institutional
+              barriers. Curious Bright was founded on the belief that collaborative learning accelerates
+              discovery.
             </p>
-            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-              Whether you're a student cramming for exams, a researcher exploring new fields, or a self-taught
-              learner following your passions — CuriousBright is your academic home.
+            <p className="text-muted" style={{ lineHeight: 1.75 }}>
+              Whether you are a student revising for exams, a researcher exploring a new field or a
+              self-taught learner following your curiosity, this is your academic home.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Features grid */}
-      <section style={{ marginBottom: '3.5rem' }}>
-        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.5rem' }}>What We Offer</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.75rem', fontSize: '0.9rem' }}>
-          Everything you need to learn, collaborate, and grow.
-        </p>
+      <section style={{ marginBottom: '3rem' }}>
+        <div className="flex items-center justify-between gap-3 mb-4" style={{ flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ fontSize: '1.4rem', marginBottom: '0.2rem' }}>What we offer</h2>
+            <p className="text-muted text-sm">Everything you need to learn, collaborate and grow.</p>
+          </div>
+          <Link to="/community" className="btn btn-secondary" style={{ padding: '0.45rem 0.9rem', fontSize: '0.8rem' }}>
+            Visit study rooms
+          </Link>
+        </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
-          gap: '1.25rem',
-        }}>
-          {features.map((f) => (
-            <div key={f.title} className="glass-card glass-card-interactive" style={{ padding: '1.5rem' }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 'var(--radius-md)',
-                background: 'rgba(99,102,241,0.1)',
-                border: '1px solid rgba(99,102,241,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.375rem',
-                marginBottom: '1rem',
-              }}>
-                {f.icon}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
+          {features.map((feature) => (
+            <div key={feature.title} className="glass-card glass-card-interactive" style={{ padding: '1.35rem' }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '4px 0 4px 4px',
+                  background: 'rgba(0, 168, 150, 0.1)',
+                  border: '1.5px solid rgba(0, 168, 150, 0.22)',
+                  color: '#007A6D',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.3rem',
+                  marginBottom: '0.9rem',
+                }}
+              >
+                <i className={`bx ${feature.icon}`}></i>
               </div>
-              <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', fontWeight: 700 }}>{f.title}</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>{f.desc}</p>
+              <h3 style={{ fontSize: '1rem', marginBottom: '0.4rem', fontWeight: 700 }}>{feature.title}</h3>
+              <p className="text-muted" style={{ fontSize: '0.86rem', lineHeight: 1.65 }}>{feature.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* How it works */}
-      <section className="glass-card" style={{ marginBottom: '3rem', padding: '2.5rem' }}>
-        <h2 style={{ marginBottom: '1.75rem', fontSize: '1.375rem' }}>How It Works</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {[
-            { step: '01', title: 'Create your account', desc: 'Sign up for free in under 60 seconds. No credit card required.' },
-            { step: '02', title: 'Explore the library', desc: 'Browse thousands of research papers and academic resources across all disciplines.' },
-            { step: '03', title: 'Join a study room', desc: 'Connect with learners in real-time — video, audio, chat, and live whiteboards.' },
-            { step: '04', title: 'Contribute & grow', desc: 'Submit your own research, help others learn, and build your academic reputation.' },
-          ].map((item, i) => (
-            <div key={item.step} style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                background: i === 0 ? 'linear-gradient(135deg, var(--accent), #8b5cf6)' : 'rgba(99,102,241,0.08)',
-                border: i === 0 ? 'none' : '1px solid rgba(99,102,241,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 800, fontSize: '0.8125rem',
-                color: i === 0 ? '#fff' : '#a5b4fc',
-                boxShadow: i === 0 ? '0 4px 14px var(--accent-glow)' : 'none',
-              }}>
+      <section className="glass-card" style={{ marginBottom: '2rem', padding: '2rem' }}>
+        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.35rem' }}>How it works</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {steps.map((item, index) => (
+            <div key={item.step} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <div
+                className="font-display"
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '5px 0 5px 5px',
+                  flexShrink: 0,
+                  background: index === 0 ? 'var(--color-ink)' : 'var(--color-paper)',
+                  border: index === 0 ? '1.5px solid var(--color-ink)' : '1.5px solid var(--color-line)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  color: index === 0 ? 'var(--color-paper)' : 'var(--color-faded-ink)',
+                }}
+              >
                 {item.step}
               </div>
               <div>
-                <div style={{ fontWeight: 700, marginBottom: '0.25rem', color: 'var(--text-primary)' }}>{item.title}</div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{item.desc}</div>
+                <div style={{ fontWeight: 700, marginBottom: '0.15rem' }}>{item.title}</div>
+                <div className="text-sm text-muted" style={{ lineHeight: 1.6 }}>{item.desc}</div>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Team */}
-      <section style={{ marginBottom: '3.5rem' }}>
-        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.375rem' }}>Our Teams</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-          Dedicated people keeping CuriousBright running and growing.
+      <section style={{ marginBottom: '2.5rem' }}>
+        <h2 style={{ marginBottom: '0.3rem', fontSize: '1.35rem' }}>Our teams</h2>
+        <p className="text-muted text-sm" style={{ marginBottom: '1.25rem' }}>
+          The people keeping Curious Bright useful, safe and growing.
         </p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: '1rem',
-        }}>
-          {team.map((t) => (
-            <div key={t.name} className="glass-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.75rem', marginBottom: '0.75rem' }}>{t.emoji}</div>
-              <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: '0.25rem' }}>{t.name}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.role}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+          {team.map((member) => (
+            <div key={member.name} className="glass-card" style={{ padding: '1.2rem', textAlign: 'center' }}>
+              <div style={{ color: 'var(--color-coral)', fontSize: '1.4rem', marginBottom: '0.6rem' }}>
+                <i className={`bx ${member.icon}`}></i>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: '0.2rem' }}>{member.name}</div>
+              <div className="text-xs text-muted">{member.role}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CTA Banner */}
-      <section style={{
-        borderRadius: 'var(--radius-lg)',
-        padding: '2.5rem',
-        background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.1) 100%)',
-        border: '1px solid rgba(99,102,241,0.25)',
-        textAlign: 'center',
-      }}>
-        <h2 style={{ marginBottom: '0.75rem', fontSize: '1.5rem' }}>Ready to start learning?</h2>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.75rem', maxWidth: 480, margin: '0 auto 1.75rem' }}>
-          Join thousands of curious minds already using CuriousBright to accelerate their learning journey.
+      <section
+        className="glass-card"
+        style={{
+          padding: '2.25rem',
+          textAlign: 'center',
+          background: 'linear-gradient(135deg, rgba(244, 180, 61, 0.14), rgba(255, 90, 54, 0.06))',
+          borderColor: 'rgba(244, 180, 61, 0.55)',
+        }}
+      >
+        <h2 style={{ marginBottom: '0.6rem', fontSize: '1.4rem' }}>Ready to start learning?</h2>
+        <p className="text-muted" style={{ marginBottom: '1.5rem', maxWidth: 480, margin: '0 auto 1.5rem' }}>
+          Join a community of curious minds sharing what they know and learning what they do not.
         </p>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link to="/register" id="about-cta-register" className="btn btn-primary" style={{ padding: '0.75rem 2rem' }}>
-            Get Started Free →
+        <div className="flex justify-center gap-3" style={{ flexWrap: 'wrap' }}>
+          <Link to="/register" id="about-cta-register" className="btn btn-primary" style={{ padding: '0.7rem 1.8rem' }}>
+            Get started free <i className="bx bx-right-arrow-alt"></i>
           </Link>
-          <Link to="/browse" id="about-cta-browse" className="btn btn-secondary" style={{ padding: '0.75rem 2rem' }}>
-            Browse Papers
+          <Link to="/browse" id="about-cta-browse" className="btn btn-secondary" style={{ padding: '0.7rem 1.8rem' }}>
+            Browse papers
           </Link>
         </div>
       </section>
 
-      {/* Footer note */}
-      <p style={{ textAlign: 'center', marginTop: '2.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        CuriousBright is open source and community-driven. ·{' '}
-        <Link to="/apply-moderator" style={{ color: 'var(--accent)' }}>Apply as Moderator</Link>
+      <p className="text-center text-xs text-muted" style={{ marginTop: '2rem' }}>
+        Curious Bright is open source and community-driven. ·{' '}
+        <Link to="/apply-moderator" style={{ color: 'var(--color-teal)', fontWeight: 700 }}>Apply as moderator</Link>
         {' '}·{' '}
-        <Link to="/mod-login" style={{ color: 'var(--accent)' }}>Moderator Portal</Link>
+        <Link to="/mod-login" style={{ color: 'var(--color-teal)', fontWeight: 700 }}>Moderator portal</Link>
       </p>
     </div>
   );
