@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from apps.community.models import Notification, Post
 from apps.community.notifications import notify
 from apps.community.serializers import PostListSerializer
+from apps.community.visibility import post_groups
+from apps.realtime.broadcast import publish
 
 from .models import ModeratorApplication, Report
 from .permissions import IsModerator
@@ -73,7 +75,7 @@ class ApprovePostView(APIView):
             post=post,
         )
         publish(
-            set(feed_groups(post.author)) | {f"post.{post.pk}"},
+            post_groups(post),
             "post.created",
             PostListSerializer(post, context={"request": request}).data,
         )
@@ -95,7 +97,7 @@ class RejectPostView(APIView):
             post=post,
         )
         publish(
-            set(feed_groups(post.author)) | {f"post.{post.pk}"},
+            post_groups(post),
             "post.updated",
             PostListSerializer(post, context={"request": request}).data,
         )

@@ -40,4 +40,7 @@ class Command(BaseCommand):
             return
 
         user = User.objects.create_superuser(username=username, email=email, password=password)
+        if hasattr(user, "profile"):
+            user.profile.must_change_password = True
+            user.profile.save(update_fields=["must_change_password"])
         self.stdout.write(self.style.SUCCESS(f"Admin '{user.username}' created (profile auto-created)."))

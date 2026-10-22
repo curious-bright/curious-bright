@@ -8,6 +8,7 @@ urlpatterns = [
     path("posts/<int:pk>/like/", views.ToggleLikeView.as_view(), name="post_like"),
     path("posts/<int:pk>/solve/", views.MarkSolvedView.as_view(), name="post_solve"),
     path("posts/<int:pk>/restore/", views.RestorePostView.as_view(), name="post_restore"),
+    path("posts/<int:pk>/activity/", views.PostActivityView.as_view(), name="post_activity"),
     path("posts/<int:pk>/comments/", views.CommentCreateView.as_view(), name="comment_create"),
     path("comments/<int:pk>/", views.CommentDetailView.as_view(), name="comment_detail"),
     path("comments/<int:pk>/helpful/", views.ToggleHelpfulView.as_view(), name="comment_helpful"),

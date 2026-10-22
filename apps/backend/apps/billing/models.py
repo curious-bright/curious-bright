@@ -98,6 +98,8 @@ class PlanTier(models.Model):
         NGO = "ngo", "Non-Governmental Organization (NGO)"
         RESEARCH_INSTITUTE = "research_institute", "Research Institute"
         UNIVERSITY = "university", "University"
+        PRO = "pro", "Pro"
+        ENTERPRISE = "enterprise", "Enterprise"
 
     code = models.SlugField(max_length=40, unique=True)
     name = models.CharField(max_length=120)

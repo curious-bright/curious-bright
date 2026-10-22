@@ -4,6 +4,11 @@ from . import views
 
 urlpatterns = [
     path("organizations/", views.OrganizationListCreateView.as_view(), name="org_list_create"),
+    path(
+        "organizations/students/template/",
+        views.StudentCSVTemplateView.as_view(),
+        name="org_students_template",
+    ),
     path("organizations/join-by-domain/", views.JoinByDomainView.as_view(), name="org_join_domain"),
     path("organizations/invitations/me/", views.MyInvitationsView.as_view(), name="org_my_invitations"),
     path(
@@ -36,6 +41,26 @@ urlpatterns = [
         name="org_invitation_revoke",
     ),
     path("organizations/<slug:slug>/stats/", views.OrganizationStatsView.as_view(), name="org_stats"),
+    path(
+        "organizations/<slug:slug>/members.csv",
+        views.OrganizationCSVExportView.as_view(),
+        name="org_members_csv",
+    ),
+    path(
+        "organizations/<slug:slug>/students/",
+        views.CreateStudentAccountView.as_view(),
+        name="org_student_create",
+    ),
+    path(
+        "organizations/<slug:slug>/students/import/",
+        views.BulkStudentImportView.as_view(),
+        name="org_students_import",
+    ),
+    path(
+        "organizations/<slug:slug>/members/link/",
+        views.LinkMemberAccountView.as_view(),
+        name="org_member_link",
+    ),
     path(
         "organizations/<slug:slug>/audit-logs/",
         views.OrganizationAuditLogView.as_view(),

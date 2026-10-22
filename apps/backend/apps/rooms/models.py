@@ -20,6 +20,11 @@ class Room(SoftDeleteModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    whiteboard_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Persisted collaborative whiteboard strokes (v1 snapshot).",
+    )
 
     class Meta:
         ordering = ["-created_at"]

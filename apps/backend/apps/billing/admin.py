@@ -1,6 +1,24 @@
 from django.contrib import admin
 
-from .models import OrganizationSubscription, Payment, WebhookEvent
+from .models import OrganizationSubscription, Payment, PlanTier, WebhookEvent
+
+
+@admin.register(PlanTier)
+class PlanTierAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "code",
+        "tier_type",
+        "monthly_price_ngn",
+        "monthly_price_usd",
+        "annual_price_ngn",
+        "annual_price_usd",
+        "seat_limit",
+        "is_active",
+    )
+    list_filter = ("tier_type", "is_active")
+    search_fields = ("name", "code", "tagline")
+    prepopulated_fields = {"code": ("name",)}
 
 
 @admin.register(Payment)

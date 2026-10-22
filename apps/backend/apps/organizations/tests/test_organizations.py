@@ -318,6 +318,149 @@ class OrganizationAPITests(TestCase):
             self.client.delete(f"/api/organizations/{self.org.slug}/").status_code, 403
         )
 
+    # ------------------------------------------------------------------
+    # CSV onboarding, student accounts and account linking
+    # ------------------------------------------------------------------
+
+    def test_csv_template_download(self):
+        response = self.client.get("/api/organizations/students/template/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response["Content-Type"])
+        text = response.content.decode()
+        self.assertIn("username,email,first_name,last_name,student_id,department,title", text)
+        self.assertIn("ada.okafor", text)
+
+    def test_csv_import_creates_accounts_and_links_existing_ones(self):
+        existing = User.objects.create_user(
+            username="existing",
+            email="existing@greenfield.edu",
+            password="Str0ng!Passw0rd99",
+        )
+        csv_body = (
+            "username,email,first_name,last_name,student_id,department,title\n"
+            "newstudent,new@greenfield.edu,New,Student,STU-1,Physics,Year 1\n"
+            ",existing@greenfield.edu,,,STU-2,Maths,Year 2\n"
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        upload = SimpleUploadedFile(
+            "students.csv", csv_body.encode(), content_type="text/csv"
+        )
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/students/import/",
+            {"file": upload},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["summary"], {"created": 1, "linked": 1, "failed": 0})
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                organization=self.org, user__username="newstudent", student_id="STU-1"
+            ).exists()
+        )
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                organization=self.org, user=existing, student_id="STU-2"
+            ).exists()
+        )
+        created_row = next(row for row in body["results"] if row["created_account"])
+        self.assertTrue(created_row["temporary_password"])
+        # A one-time password is returned once and is never exposed in the member list.
+        self.assertNotIn(
+            created_row["temporary_password"],
+            self.client.get(f"/api/organizations/{self.org.slug}/members/").content.decode(),
+        )
+
+    def test_csv_import_rejects_non_admin(self):
+        student = self.make_member("student", OrganizationMembership.Role.STUDENT)
+        self.client.force_authenticate(user=student)
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/students/import/",
+            {"students": [{"email": "x@greenfield.edu"}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_csv_import_respects_seat_limit(self):
+        self.org.seat_limit = 1
+        self.org.save(update_fields=["seat_limit"])
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/students/import/",
+            {"students": [{"email": "overflow@greenfield.edu"}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["results"][0]["success"])
+        self.assertIn("Seat limit", response.json()["results"][0]["error"])
+
+    def test_member_export_is_admin_only_and_contains_rows(self):
+        self.make_member("student", OrganizationMembership.Role.STUDENT)
+        response = self.client.get(f"/api/organizations/{self.org.slug}/members.csv")
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode()
+        self.assertIn("owner@greenfield.edu", text)
+        self.assertIn("student@greenfield.edu", text)
+
+        student = self.org.memberships.get(user__username="student").user
+        self.client.force_authenticate(user=student)
+        self.assertEqual(
+            self.client.get(f"/api/organizations/{self.org.slug}/members.csv").status_code,
+            403,
+        )
+
+    def test_create_student_account_and_link_existing_account(self):
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/students/",
+            {
+                "email": "new@greenfield.edu",
+                "username": "newbie",
+                "first_name": "New",
+                "last_name": "Person",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertTrue(body["created_account"])
+        self.assertTrue(body["temporary_password"])
+
+        existing = User.objects.create_user(
+            username="linked", email="linked@greenfield.edu", password="Str0ng!Passw0rd99"
+        )
+        linked = self.client.post(
+            f"/api/organizations/{self.org.slug}/members/link/",
+            {"username": existing.username, "role": "teacher"},
+            format="json",
+        )
+        self.assertEqual(linked.status_code, 201, linked.content)
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                organization=self.org, user=existing, role="teacher"
+            ).exists()
+        )
+
+    def test_account_linking_cannot_demote_owner(self):
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/members/link/",
+            {"username": self.owner.username, "role": "student"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertEqual(
+            self.org.memberships.get(user=self.owner).role,
+            OrganizationMembership.Role.OWNER,
+        )
+
+    def test_account_linking_unknown_user(self):
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/members/link/",
+            {"username": "missing-person"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
     @staticmethod
     def _future():
         from datetime import timedelta

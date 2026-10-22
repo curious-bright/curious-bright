@@ -18,9 +18,9 @@ class MembershipInline(admin.TabularInline):
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = (
-        "name", "slug", "plan_tier", "subscription_status", "seat_limit", "is_active", "created_at"
+        "name", "slug", "org_type", "plan_tier", "tier", "subscription_status", "seat_limit", "is_active", "created_at"
     )
-    list_filter = ("plan_tier", "subscription_status", "auto_join_domain", "is_active")
+    list_filter = ("org_type", "plan_tier", "subscription_status", "auto_join_domain", "is_active")
     search_fields = ("name", "slug", "domain", "owner__username", "owner__email")
     autocomplete_fields = ("owner",)
     prepopulated_fields = {"slug": ("name",)}

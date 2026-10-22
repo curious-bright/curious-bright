@@ -14,8 +14,20 @@ from apps.gamification.models import Badge, UserBadge
 from apps.moderation.models import ModeratorApplication, Report
 from apps.research.models import ResearchDocument
 from apps.rooms.models import Room, RoomMessage
+from .models import ContentAuditLog
 
 admin.site.index_template = "admin/curious_index.html"
+
+
+@admin.register(ContentAuditLog)
+class ContentAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("action", "content_type", "object_id", "object_repr", "actor", "created_at")
+    list_filter = ("action", "content_type", "created_at")
+    search_fields = ("object_id", "object_repr", "reason", "actor__username")
+    readonly_fields = ("action", "content_type", "object_id", "object_repr", "actor", "reason", "metadata", "created_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 def _list_url(model, query=""):
@@ -247,7 +259,14 @@ def _dashboard_stats():
 def dashboard_callback(request, context):
     context = dict(context)
     try:
-        context["dashboard_stats"] = _dashboard_stats()
+        stats = _dashboard_stats()
+        is_default_pass = False
+        default_pwd = getattr(settings, "ADMIN_PASSWORD", None)
+        if request.user.is_superuser and default_pwd:
+            is_default_pass = request.user.check_password(default_pwd)
+        must_change = getattr(getattr(request.user, "profile", None), "must_change_password", False)
+        context["admin_security_reminder"] = is_default_pass or must_change
+        context["dashboard_stats"] = stats
     except Exception as exc:  # never break the admin index on a stats hiccup
         context["dashboard_stats"] = {"error": f"Dashboard stats unavailable: {exc}"}
     return context

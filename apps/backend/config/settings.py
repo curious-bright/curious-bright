@@ -328,6 +328,14 @@ PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", "")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", "")
 PAYSTACK_API_BASE = env("PAYSTACK_API_BASE", "https://api.paystack.co")
+
+# --- Live video (LiveKit) ---
+# Create a project at https://cloud.livekit.io and copy the ws URL + API key.
+# Tokens are minted server-side so the API secret never reaches the browser.
+LIVEKIT_URL = env("LIVEKIT_URL", "")
+LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", "")
+LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", "")
+LIVEKIT_TOKEN_TTL_SECONDS = env_int("LIVEKIT_TOKEN_TTL_SECONDS", 7200)
 BILLING_PLAN_PRICES = {
     "pro": {
         "NGN": env_int("BILLING_PRO_NGN", 500000),

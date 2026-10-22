@@ -5,10 +5,12 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.community.models import Comment, Post
+from apps.research.models import ResearchDocument
+from apps.rooms.models import Room
 
 
 class Command(BaseCommand):
-    help = "Hard-delete soft-deleted posts/comments past the retention window."
+    help = "Hard-delete soft-deleted posts, comments, rooms and research past the retention window."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -27,17 +29,31 @@ class Command(BaseCommand):
         comments = Comment.all_objects.filter(
             is_deleted=True, deleted_at__lt=cutoff, replies__isnull=True
         )
+        rooms = Room.all_objects.filter(is_deleted=True, deleted_at__lt=cutoff)
+        research = ResearchDocument.all_objects.filter(
+            is_deleted=True, deleted_at__lt=cutoff
+        )
 
         if options["dry_run"]:
             self.stdout.write(
-                f"Would purge {posts.count()} posts and {comments.count()} comments."
+                f"Would purge {posts.count()} posts, {comments.count()} comments, "
+                f"{rooms.count()} rooms and {research.count()} research documents."
             )
             return
 
-        post_count = posts.count()
-        comment_count = comments.count()
+        counts = {
+            "posts": posts.count(),
+            "comments": comments.count(),
+            "rooms": rooms.count(),
+            "research": research.count(),
+        }
         posts.hard_delete()
         comments.hard_delete()
+        rooms.hard_delete()
+        research.hard_delete()
         self.stdout.write(
-            self.style.SUCCESS(f"Purged {post_count} posts and {comment_count} comments.")
+            self.style.SUCCESS(
+                "Purged {posts} posts, {comments} comments, {rooms} rooms and "
+                "{research} research documents.".format(**counts)
+            )
         )

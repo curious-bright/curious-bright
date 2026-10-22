@@ -7,19 +7,31 @@ from .models import Follow, Profile
 User = get_user_model()
 
 
-class ProfileSerializer(serializers.ModelSerializer):
+def _absolute_url(request, url):
+    if not url:
+        return ""
+    if request:
+        return request.build_absolute_uri(url)
+    return url
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    """Profile data safe to show to anonymous visitors (no email)."""
+
     username = serializers.CharField(source="user.username", read_only=True)
-    email = serializers.EmailField(source="user.email", read_only=True)
     badges = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
         fields = [
             "username",
-            "email",
             "bio",
             "avatar",
+            "avatar_url",
             "subject_expertise",
+            "country",
+            "school",
             "post_count",
             "followers_count",
             "following_count",
@@ -27,7 +39,22 @@ class ProfileSerializer(serializers.ModelSerializer):
             "badges",
             "created_at",
         ]
-        read_only_fields = ["post_count", "followers_count", "following_count", "badge_count", "created_at"]
+
+    def get_avatar_url(self, obj):
+        request = self.context.get("request")
+        if obj.avatar_file:
+            try:
+                return _absolute_url(request, obj.avatar_file.url)
+            except ValueError:
+                pass
+        return obj.avatar or ""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Keep one canonical `avatar` value for legacy components.
+        if data.get("avatar_url"):
+            data["avatar"] = data["avatar_url"]
+        return data
 
     def get_badges(self, obj):
         from apps.gamification.models import UserBadge
@@ -38,22 +65,83 @@ class ProfileSerializer(serializers.ModelSerializer):
             .order_by("-awarded_at")
         )
         return [
-            {"code": ub.badge.code, "name": ub.badge.name, "description": ub.badge.description, "icon": ub.badge.icon, "awarded_at": ub.awarded_at}
+            {
+                "code": ub.badge.code,
+                "name": ub.badge.name,
+                "description": ub.badge.description,
+                "icon": ub.badge.icon,
+                "awarded_at": ub.awarded_at,
+            }
             for ub in rows
         ]
 
 
-class UserSerializer(serializers.ModelSerializer):
-    profile = ProfileSerializer(read_only=True)
+class ProfileSerializer(PublicProfileSerializer):
+    """The signed-in member's editable profile."""
+
+    email = serializers.EmailField(source="user.email", read_only=True)
+    avatar_file = serializers.FileField(required=False, allow_null=True, write_only=True)
+
+    class Meta(PublicProfileSerializer.Meta):
+        fields = PublicProfileSerializer.Meta.fields + ["email", "avatar_file"]
+        read_only_fields = [
+            "post_count",
+            "followers_count",
+            "following_count",
+            "badge_count",
+            "created_at",
+        ]
+
+    def validate_avatar_file(self, value):
+        if value is None:
+            return value
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Avatar images must be 5 MB or smaller.")
+        allowed = ("image/jpeg", "image/png", "image/webp", "image/gif")
+        if getattr(value, "content_type", "") not in allowed:
+            raise serializers.ValidationError("Upload a JPEG, PNG, WebP or GIF image.")
+        return value
+
+
+class PublicUserSerializer(serializers.ModelSerializer):
+    """Author/user shape used in feeds, comments, rooms and research."""
+
+    profile = PublicProfileSerializer(read_only=True)
     can_moderate = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "profile", "is_moderator", "can_moderate"]
+        fields = ["id", "username", "profile", "can_moderate"]
 
     def get_can_moderate(self, obj):
-        # Without revealing which flag is set (staff vs granted role).
         return bool(obj.is_moderator or obj.is_staff)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Private "me" shape. Only ever returned for the authenticated user."""
+
+    profile = ProfileSerializer(read_only=True)
+    can_moderate = serializers.SerializerMethodField()
+    must_change_password = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "profile",
+            "is_moderator",
+            "can_moderate",
+            "must_change_password",
+        ]
+
+    def get_can_moderate(self, obj):
+        return bool(obj.is_moderator or obj.is_staff)
+
+    def get_must_change_password(self, obj):
+        profile = getattr(obj, "profile", None)
+        return bool(profile and profile.must_change_password)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -86,6 +174,11 @@ class ChangePasswordSerializer(serializers.Serializer):
         if not user.check_password(value):
             raise serializers.ValidationError("Old password is incorrect.")
         return value
+
+    def validate(self, attrs):
+        if attrs["old_password"] == attrs["new_password"]:
+            raise serializers.ValidationError("Choose a password different from your current one.")
+        return attrs
 
 
 class FollowSerializer(serializers.ModelSerializer):

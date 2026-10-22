@@ -61,6 +61,35 @@ class BillingAPITests(TestCase):
             next(plan for plan in usd["plans"] if plan["code"] == "pro")["amount"], 1200
         )
 
+    def test_annual_plan_pricing_and_metadata(self):
+        response = self.client.get("/api/billing/plans/?currency=NGN&interval=year")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["interval"], "year")
+        plan = next(row for row in body["plans"] if row["code"] == "university") if any(
+            row["code"] == "university" for row in body["plans"]
+        ) else next(row for row in body["plans"] if row["code"] == "pro")
+        self.assertEqual(plan["interval"], "year")
+        self.assertGreater(plan["amount"], 0)
+
+        with patch("apps.billing.views.initialize_transaction") as initialize:
+            initialize.return_value = {"authorization_url": "https://checkout.paystack.com/year"}
+            response = self.checkout(plan_code=plan["code"], interval="year")
+        self.assertEqual(response.status_code, 201, response.content)
+        payment = Payment.objects.get()
+        self.assertEqual(payment.metadata["interval"], "year")
+        self.assertEqual(
+            initialize.call_args.kwargs["metadata"]["interval"], "year"
+        )
+
+    def test_unknown_plan_or_currency_is_rejected(self):
+        response = self.checkout(plan_code="not-a-plan")
+        self.assertIn(response.status_code, (400, 404))
+        self.assertEqual(set(response.json()), {"code", "message"})
+        response = self.checkout(currency="GBP")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "validation_error")
+
     def test_checkout_requires_login(self):
         response = APIClient().post(
             "/api/billing/checkout/",

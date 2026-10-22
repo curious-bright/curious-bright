@@ -128,7 +128,7 @@ def complete_payment(payment, provider_data=None):
             org.seat_limit = plan["seats"]
         org.save(update_fields=["plan_tier", "subscription_status", "seat_limit", "updated_at"])
 
-        days = 365 if plan["interval"] == "year" else 30
+        days = 365 if (payment.metadata or {}).get("interval") == "year" else 30
         OrganizationSubscription.objects.update_or_create(
             organization=org,
             defaults={

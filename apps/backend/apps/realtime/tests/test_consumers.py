@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.community.models import Post
 from apps.realtime.routing import websocket_urlpatterns
 from apps.rooms.models import Room, RoomMember
 from config.asgi import JWTAuthMiddleware
@@ -79,6 +80,82 @@ class RealtimeConsumerTests(TransactionTestCase):
 
     async def test_notifications_require_auth(self):
         communicator = WebsocketCommunicator(_app(), "/ws/notifications/")
+        connected, _ = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
+
+    async def test_post_socket_respects_followers_visibility(self):
+        post = await database_sync_to_async(Post.objects.create)(
+            author=self.user,
+            title="Followers only",
+            body="Private discussion",
+            visibility=Post.Visibility.FOLLOWERS,
+        )
+        outsider = await database_sync_to_async(User.objects.create_user)(
+            username="postoutsider", email="postoutsider@example.com", password="Str0ng!Passw0rd99"
+        )
+        outsider_token = await database_sync_to_async(
+            lambda: str(AccessToken.for_user(outsider))
+        )()
+
+        rejected = WebsocketCommunicator(
+            _app(), f"/ws/posts/{post.pk}/?token={outsider_token}"
+        )
+        connected, _ = await rejected.connect()
+        self.assertFalse(connected)
+        await rejected.disconnect()
+
+        owner = WebsocketCommunicator(_app(), f"/ws/posts/{post.pk}/?token={self.token}")
+        connected, _ = await owner.connect()
+        self.assertTrue(connected)
+        await owner.receive_json_from()
+        await owner.disconnect()
+
+    async def test_whiteboard_socket_persists_strokes_for_members(self):
+        communicator = WebsocketCommunicator(
+            _app(), f"/ws/rooms/{self.room.pk}/whiteboard/?token={self.token}"
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        state = await communicator.receive_json_from()
+        self.assertEqual(state["event"], "whiteboard.state")
+        self.assertTrue(state["data"]["can_clear"])
+
+        await communicator.send_json_to(
+            {
+                "type": "stroke",
+                "stroke": {
+                    "id": "stroke-1",
+                    "points": [[0.1, 0.2], [0.3, 0.4]],
+                    "color": "#00A896",
+                    "width": 4,
+                    "tool": "pen",
+                },
+            }
+        )
+        event = None
+        for _ in range(3):
+            candidate = await communicator.receive_json_from()
+            if candidate["event"] == "whiteboard.stroke":
+                event = candidate
+                break
+        self.assertIsNotNone(event)
+        self.assertEqual(event["data"]["stroke"]["id"], "stroke-1")
+
+        saved = await database_sync_to_async(
+            lambda: Room.objects.get(pk=self.room.pk).whiteboard_data
+        )()
+        self.assertEqual(saved["strokes"][0]["id"], "stroke-1")
+        await communicator.disconnect()
+
+    async def test_whiteboard_rejects_non_member(self):
+        outsider = await database_sync_to_async(User.objects.create_user)(
+            username="wboutsider", email="wboutsider@example.com", password="Str0ng!Passw0rd99"
+        )
+        token = await database_sync_to_async(lambda: str(AccessToken.for_user(outsider)))()
+        communicator = WebsocketCommunicator(
+            _app(), f"/ws/rooms/{self.room.pk}/whiteboard/?token={token}"
+        )
         connected, _ = await communicator.connect()
         self.assertFalse(connected)
         await communicator.disconnect()

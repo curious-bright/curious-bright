@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 from apps.organizations.models import Organization, OrganizationMembership
 
 from .models import OrganizationSubscription, Payment, WebhookEvent, new_reference
-from .plans import amount_for, get_plan, plans_payload
+from .plans import amount_for, detect_currency_from_request, get_plan, plans_payload
 from .serializers import CheckoutSerializer, OrganizationSubscriptionSerializer, PaymentSerializer
 from .services import (
     BillingNotConfigured,
@@ -62,7 +62,8 @@ def _checkout(request, data):
             status=status.HTTP_400_BAD_REQUEST,
         )
     currency = data["currency"]
-    price = amount_for(plan["code"], currency)
+    interval = data.get("interval", "month")
+    price = amount_for(plan["code"], currency, interval=interval)
     if price <= 0:
         return Response(
             {"code": "plan_not_purchasable", "message": "That plan is not available in this currency."},
@@ -82,7 +83,7 @@ def _checkout(request, data):
         plan_code=plan["code"],
         amount=price,
         currency=currency,
-        metadata={"organization": org.slug, "plan": plan["code"], "user_id": request.user.pk},
+        metadata={"organization": org.slug, "plan": plan["code"], "interval": interval, "user_id": request.user.pk},
     )
     callback = getattr(
         settings,
@@ -126,8 +127,9 @@ class PlansView(APIView):
     throttle_classes = []
 
     def get(self, request):
-        currency = (request.query_params.get("currency") or "NGN").upper()
-        return Response(plans_payload(currency))
+        currency = detect_currency_from_request(request)
+        interval = (request.query_params.get("interval") or "month").lower()
+        return Response(plans_payload(currency, interval=interval))
 
 
 class CheckoutView(APIView):
@@ -150,6 +152,7 @@ class OrganizationSubscribeView(APIView):
                 "organization": slug,
                 "plan_code": request.data.get("plan_code") or request.data.get("plan") or "pro",
                 "currency": request.data.get("currency") or "NGN",
+                "interval": request.data.get("interval") or "month",
             }
         )
         serializer.is_valid(raise_exception=True)

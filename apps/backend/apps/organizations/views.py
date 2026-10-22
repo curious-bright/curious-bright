@@ -1,7 +1,13 @@
 from datetime import timedelta
+import csv
+import io
+import secrets
+import string
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -9,6 +15,8 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.accounts.models import Profile
 
 from .models import (
     Organization,
@@ -519,4 +527,339 @@ class OrganizationAuditLogView(generics.ListAPIView):
                 }
                 for row in rows
             ]
+        )
+
+
+# ---------------------------------------------------------------------------
+# Student accounts, CSV onboarding and account linking
+# ---------------------------------------------------------------------------
+
+CSV_COLUMNS = [
+    "username",
+    "email",
+    "first_name",
+    "last_name",
+    "student_id",
+    "department",
+    "title",
+]
+
+
+def _unique_username(email: str) -> str:
+    base = (email or "student").split("@")[0]
+    base = "".join(ch for ch in base if ch.isalnum() or ch in "._-").strip("._-")
+    base = base[:24] or "student"
+    candidate = base
+    suffix = 1
+    while User.objects.filter(username=candidate).exists():
+        suffix += 1
+        candidate = f"{base}{suffix}"[:30]
+    return candidate
+
+
+def _new_password() -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(14))
+
+
+def _add_or_link_member(
+    org,
+    *,
+    email,
+    actor,
+    actor_membership,
+    role,
+    username="",
+    first_name="",
+    last_name="",
+    student_id="",
+    department="",
+    title="",
+):
+    """Create a user when needed, then attach an active membership.
+
+    Returns ``(membership, user, temporary_password, created_account)``.
+    Raises ``ValueError`` for seat/role problems.
+    """
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        raise ValueError("A valid email address is required.")
+    if not _can_assign(actor_membership, role):
+        raise ValueError("You cannot assign that role.")
+
+    existing = org.memberships.select_related("user").filter(user__email__iexact=email).first()
+    if existing:
+        # Never let a CSV import or an account link silently demote the
+        # organisation owner (or an account at/above the actor's role).
+        if existing.role == OrganizationMembership.Role.OWNER:
+            raise ValueError("The organization owner already has an account.")
+        if role_rank(existing.role) >= role_rank(role) and existing.role != role:
+            raise ValueError("That member already has an equal or higher role.")
+        existing.status = OrganizationMembership.Status.ACTIVE
+        existing.role = role
+        if student_id:
+            existing.student_id = student_id[:64]
+        if department:
+            existing.department = department[:120]
+        if title:
+            existing.title = title[:120]
+        existing.save()
+        audit(org, actor, "member.linked", existing, email=email, role=role)
+        return existing, existing.user, "", False
+
+    user = User.objects.filter(email__iexact=email).first()
+    temp_password = ""
+    created_account = False
+    if user is None:
+        if not _has_seat(org):
+            raise ValueError("Seat limit reached.")
+        desired = (username or "").strip()
+        if desired and User.objects.filter(username=desired).exists():
+            desired = ""
+        user = User.objects.create_user(
+            username=desired or _unique_username(email),
+            email=email,
+            password=_new_password(),
+            first_name=(first_name or "").strip()[:150],
+            last_name=(last_name or "").strip()[:150],
+        )
+        temp_password = _new_password()
+        user.set_password(temp_password)
+        user.save(update_fields=["password"])
+        Profile.objects.filter(user=user).update(must_change_password=True)
+        created_account = True
+    elif not _has_seat(org):
+        raise ValueError("Seat limit reached.")
+
+    membership = OrganizationMembership.objects.create(
+        organization=org,
+        user=user,
+        role=role,
+        status=OrganizationMembership.Status.ACTIVE,
+        student_id=(student_id or "")[:64],
+        department=(department or "")[:120],
+        title=(title or "")[:120],
+        invited_by=actor,
+    )
+    audit(org, actor, "student.account_created" if created_account else "member.linked", membership)
+    return membership, user, temp_password, created_account
+
+
+class StudentCSVTemplateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="curious-bright-students-template.csv"'
+        writer = csv.writer(response)
+        writer.writerow(CSV_COLUMNS)
+        writer.writerow(
+            ["ada.okafor", "ada@school.edu", "Ada", "Okafor", "STU-001", "Computer Science", "Year 2"]
+        )
+        return response
+
+
+class OrganizationCSVExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{org.slug}-members.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            ["username", "email", "first_name", "last_name", "role", "status", "student_id", "department", "title", "joined_at"]
+        )
+        for membership in org.memberships.select_related("user").order_by("role", "joined_at"):
+            writer.writerow(
+                [
+                    membership.user.username,
+                    membership.user.email,
+                    membership.user.first_name,
+                    membership.user.last_name,
+                    membership.role,
+                    membership.status,
+                    membership.student_id,
+                    membership.department,
+                    membership.title,
+                    membership.joined_at.isoformat(),
+                ]
+            )
+        return response
+
+
+class BulkStudentImportView(APIView):
+    """Import students from a CSV file (or a JSON ``students`` list).
+
+    Existing accounts are linked, never duplicated. New accounts get a
+    one-time temporary password in the response; the password is not emailed
+    unless the deployment has an email backend configured.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        org = _org(slug)
+        actor_membership = _require_admin(request, org)
+        rows = []
+
+        upload = request.FILES.get("file")
+        if upload is not None:
+            try:
+                text = upload.read().decode("utf-8-sig")
+            except UnicodeDecodeError:
+                return Response(
+                    {"code": "validation_error", "message": "Upload a UTF-8 CSV file."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            rows = list(csv.DictReader(io.StringIO(text)))
+        elif isinstance(request.data.get("students"), list):
+            rows = request.data["students"]
+        else:
+            return Response(
+                {"code": "validation_error", "message": "Attach a CSV file or provide a students list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not rows:
+            return Response(
+                {"code": "validation_error", "message": "The CSV file has no student rows."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(rows) > 1000:
+            return Response(
+                {"code": "validation_error", "message": "Import at most 1,000 students per file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        results = []
+        for index, row in enumerate(rows, start=1):
+            email = str(row.get("email") or "").strip().lower()
+            if not email:
+                results.append({"row": index, "email": "", "success": False, "error": "Email is required."})
+                continue
+            try:
+                with transaction.atomic():
+                    membership, user, temp_password, created_account = _add_or_link_member(
+                        org,
+                        email=email,
+                        actor=request.user,
+                        actor_membership=actor_membership,
+                        role=OrganizationMembership.Role.STUDENT,
+                        username=str(row.get("username") or ""),
+                        first_name=str(row.get("first_name") or ""),
+                        last_name=str(row.get("last_name") or ""),
+                        student_id=str(row.get("student_id") or ""),
+                        department=str(row.get("department") or ""),
+                        title=str(row.get("title") or ""),
+                    )
+            except ValueError as exc:
+                results.append({"row": index, "email": email, "success": False, "error": str(exc)})
+                continue
+            entry = {
+                "row": index,
+                "email": email,
+                "username": user.username,
+                "success": True,
+                "created_account": created_account,
+                "membership_id": membership.pk,
+            }
+            if temp_password:
+                entry["temporary_password"] = temp_password
+            results.append(entry)
+
+        created = sum(1 for row in results if row.get("created_account"))
+        linked = sum(1 for row in results if row.get("success") and not row.get("created_account"))
+        failed = sum(1 for row in results if not row.get("success"))
+        return Response(
+            {
+                "results": results,
+                "summary": {"created": created, "linked": linked, "failed": failed},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CreateStudentAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        org = _org(slug)
+        actor_membership = _require_admin(request, org)
+        email = str(request.data.get("email") or "").strip().lower()
+        try:
+            membership, user, temp_password, created = _add_or_link_member(
+                org,
+                email=email,
+                actor=request.user,
+                actor_membership=actor_membership,
+                role=OrganizationMembership.Role.STUDENT,
+                username=str(request.data.get("username") or ""),
+                first_name=str(request.data.get("first_name") or ""),
+                last_name=str(request.data.get("last_name") or ""),
+                student_id=str(request.data.get("student_id") or ""),
+                department=str(request.data.get("department") or ""),
+                title=str(request.data.get("title") or ""),
+            )
+        except ValueError as exc:
+            return Response(
+                {"code": "validation_error", "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        payload = MemberSerializer(
+            membership, context={"request": request, "can_manage": True}
+        ).data
+        payload["created_account"] = created
+        if temp_password:
+            payload["temporary_password"] = temp_password
+        return Response(payload, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class LinkMemberAccountView(APIView):
+    """Attach an existing Curious Bright account to an organization."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        org = _org(slug)
+        actor_membership = _require_admin(request, org)
+        username = str(request.data.get("username") or "").strip()
+        email = str(request.data.get("email") or "").strip().lower()
+        user = None
+        if username:
+            user = User.objects.filter(username=username).first()
+        if user is None and email:
+            user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response(
+                {"code": "not_found", "message": "No account matches that username or email."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        role = request.data.get("role") or OrganizationMembership.Role.STUDENT
+        if role not in OrganizationMembership.Role.values or role == OrganizationMembership.Role.OWNER:
+            return Response(
+                {"code": "validation_error", "message": "Choose a valid non-owner role."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            membership, linked_user, _, _ = _add_or_link_member(
+                org,
+                email=user.email,
+                actor=request.user,
+                actor_membership=actor_membership,
+                role=role,
+                username=user.username,
+                student_id=str(request.data.get("student_id") or ""),
+                department=str(request.data.get("department") or ""),
+                title=str(request.data.get("title") or ""),
+            )
+        except ValueError as exc:
+            return Response(
+                {"code": "validation_error", "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            MemberSerializer(membership, context={"request": request, "can_manage": True}).data,
+            status=status.HTTP_201_CREATED,
         )

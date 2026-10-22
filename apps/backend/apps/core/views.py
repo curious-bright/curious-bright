@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 
 from apps.community.models import Post
 from apps.community.serializers import PostListSerializer
+from apps.community.visibility import visible_posts
 from apps.rooms.models import Room
 from apps.rooms.serializers import RoomSerializer
 
@@ -42,7 +43,7 @@ class SearchView(APIView):
             return Response({"posts": [], "rooms": [], "users": []})
 
         posts = (
-            Post.objects.filter(review_status=Post.ReviewStatus.PUBLISHED)
+            visible_posts(request.user)
             .filter(Q(title__icontains=q) | Q(body__icontains=q))
             .select_related("author", "author__profile")
             .prefetch_related("equations")

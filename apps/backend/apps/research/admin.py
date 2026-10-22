@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.core.models import ContentAuditLog
 from .models import Collaboration, ResearchDocument, ResearchDocumentRevision
 
 
@@ -11,11 +12,31 @@ class CollaborationInline(admin.TabularInline):
 
 @admin.register(ResearchDocument)
 class ResearchDocumentAdmin(admin.ModelAdmin):
-    list_display = ("title", "owner", "field", "status", "updated_at")
-    list_filter = ("status", "field", "updated_at")
+    list_display = ("title", "owner", "field", "status", "organization", "is_deleted", "updated_at")
+    list_filter = ("status", "field", "is_deleted", "updated_at")
     search_fields = ("title", "abstract", "body", "owner__username")
     autocomplete_fields = ("owner",)
     inlines = [CollaborationInline]
+    actions = ["restore_selected_documents"]
+
+    def get_queryset(self, request):
+        return ResearchDocument.all_objects.all()
+
+    @admin.action(description="Restore selected soft-deleted research documents")
+    def restore_selected_documents(self, request, queryset):
+        count = 0
+        for doc in queryset.filter(is_deleted=True):
+            doc.restore()
+            ContentAuditLog.objects.create(
+                actor=request.user,
+                action=ContentAuditLog.Action.RESTORE,
+                content_type="research_document",
+                object_id=str(doc.pk),
+                object_repr=str(doc),
+                reason="Restored via Django Admin",
+            )
+            count += 1
+        self.message_user(request, f"Restored {count} research document(s).")
 
 
 @admin.register(Collaboration)

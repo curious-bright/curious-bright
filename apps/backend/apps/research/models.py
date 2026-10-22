@@ -71,6 +71,12 @@ class ResearchDocumentRevision(models.Model):
     document = models.ForeignKey(ResearchDocument, on_delete=models.CASCADE, related_name="revisions")
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="research_edits")
     summary = models.CharField(max_length=300, blank=True)
+    # Snapshot of the content as of this revision, so history is restorable.
+    title = models.CharField(max_length=300, blank=True)
+    abstract = models.TextField(blank=True)
+    body = models.TextField(blank=True)
+    field = models.CharField(max_length=120, blank=True)
+    status = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
