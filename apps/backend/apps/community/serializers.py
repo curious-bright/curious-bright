@@ -169,11 +169,22 @@ class PostDetailSerializer(PostListSerializer):
 
     def get_comments(self, obj):
         # Keep deleted top-level comments as tombstones while they still have
-        # visible replies, otherwise the thread loses its context.
+        # visible replies, otherwise the thread loses its context. The author's
+        # own tombstone (and every tombstone for moderators) must also survive a
+        # reload so the undo action remains reachable after deleting a comment
+        # that had no replies. Deleted bodies are always blanked by
+        # CommentSerializer, so no private text leaks through this widening.
+        request = self.context.get("request")
+        user = request.user if request and request.user.is_authenticated else None
+        if user is not None and (user.is_staff or user.is_moderator):
+            qs = Comment.all_objects.filter(post=obj, parent=None)
+        else:
+            visible = Q(is_deleted=False) | Q(replies__is_deleted=False)
+            if user is not None:
+                visible |= Q(author=user)
+            qs = Comment.all_objects.filter(post=obj, parent=None).filter(visible)
         qs = (
-            Comment.all_objects.filter(post=obj, parent=None)
-            .filter(Q(is_deleted=False) | Q(replies__is_deleted=False))
-            .distinct()
+            qs.distinct()
             .select_related("author", "author__profile")
             .prefetch_related("replies__author__profile")
         )

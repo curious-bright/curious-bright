@@ -21,6 +21,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     badges = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
+    post_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -48,6 +49,21 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             except ValueError:
                 pass
         return obj.avatar or ""
+
+    def get_post_count(self, obj):
+        """Count posts the viewer may actually see on this profile.
+
+        The stored counter is kept for admin/list views, but it can drift when
+        posts are created before signals run. Profile pages ask for an accurate
+        count so the stat strip matches the post list below it.
+        """
+        if not self.context.get("accurate_post_count"):
+            return obj.post_count
+        from apps.community.visibility import visible_posts
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return visible_posts(user).filter(author=obj.user).count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

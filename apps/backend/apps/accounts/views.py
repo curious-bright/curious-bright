@@ -180,6 +180,29 @@ class DeleteAccountView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user = request.user
+        # Organizations protect their owner from deletion (on_delete=PROTECT).
+        # Block early with an actionable message instead of letting the
+        # ProtectedError surface as an opaque 500.
+        from apps.organizations.models import Organization
+
+        owned = list(
+            Organization.objects.filter(owner=user)
+            .order_by("name")
+            .values_list("name", flat=True)[:3]
+        )
+        if owned:
+            names = ", ".join(owned)
+            return Response(
+                {
+                    "code": "organization_owner",
+                    "message": (
+                        f"You still own {names}. Transfer ownership to another "
+                        "admin or deactivate the organization before deleting "
+                        "your account."
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         # Notifications, likes, follows and memberships cascade with the user;
         # authored content is intentionally removed with the account.
         user.delete()
@@ -196,6 +219,11 @@ class ProfileDetailView(generics.RetrieveAPIView):
     def get_object(self):
         user = get_object_or_404(User, username=self.kwargs["username"], is_active=True)
         return user.profile
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["accurate_post_count"] = True
+        return context
 
 
 class FollowView(APIView):

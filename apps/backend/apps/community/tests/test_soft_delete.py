@@ -64,6 +64,44 @@ class SoftDeleteTests(TestCase):
         self.assertEqual(len(detail["comments"][0]["replies"]), 1)
         self.assertEqual(detail["comment_count"], 1)
 
+    def test_own_deleted_comment_without_replies_stays_as_undoable_tombstone(self):
+        commenter = User.objects.create_user(
+            username="commenter", email="c@example.com", password="Str0ng!Passw0rd99"
+        )
+        comment = Comment.objects.create(
+            post=self.post, author=commenter, body="A lonely first thought"
+        )
+
+        self.client.force_authenticate(user=commenter)
+        self.assertEqual(self.client.delete(f"/api/comments/{comment.pk}/").status_code, 204)
+
+        # The author must still see their own tombstone after a reload, even
+        # when it has no replies, so the undo action can be offered.
+        detail = self.client.get(f"/api/posts/{self.post.pk}/").json()
+        self.assertEqual(len(detail["comments"]), 1)
+        self.assertTrue(detail["comments"][0]["is_deleted"])
+        self.assertEqual(detail["comments"][0]["body"], "")
+
+        # Everybody else sees a clean thread — no deleted body leaks.
+        self.client.force_authenticate(user=self.other)
+        hidden = self.client.get(f"/api/posts/{self.post.pk}/").json()
+        self.assertEqual(hidden["comments"], [])
+
+    def test_moderator_sees_deleted_comment_tombstone(self):
+        moderator = User.objects.create_user(
+            username="mod", email="mod@example.com", password="Str0ng!Passw0rd99", is_moderator=True
+        )
+        commenter = User.objects.create_user(
+            username="commenter", email="c@example.com", password="Str0ng!Passw0rd99"
+        )
+        comment = Comment.objects.create(post=self.post, author=commenter, body="Needs review")
+        comment.delete(deleted_by=commenter)
+
+        self.client.force_authenticate(user=moderator)
+        detail = self.client.get(f"/api/posts/{self.post.pk}/").json()
+        self.assertEqual(len(detail["comments"]), 1)
+        self.assertTrue(detail["comments"][0]["is_deleted"])
+
     def test_restore_window_expires(self):
         self.post.delete(deleted_by=self.author)
         Post.all_objects.filter(pk=self.post.pk).update(
