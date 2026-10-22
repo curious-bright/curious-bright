@@ -1,53 +1,96 @@
 # Contributing to Curious Bright
 
-Thank you for your interest in contributing to Curious Bright! We welcome contributions from researchers, developers, students, and educators. Please review the following guidelines before contributing.
+Thank you for helping build a more generous learning community. Contributions are welcome from developers, researchers, students and educators.
 
-## Development Setup
+## Before you start
 
-To run the repository locally:
+- Search existing issues before opening a new one.
+- For larger changes, open an issue first so the API contract, permissions and UI direction can be agreed.
+- Never commit secrets, `.env` files, API keys or production credentials.
 
-1. **Spin up local infrastructure services (PostgreSQL, Redis, LiveKit):**
-   ```bash
-   docker compose up -d
-   ```
+## Development setup
 
-2. **Install workspace dependencies:**
-   ```bash
-   pnpm install
-   ```
+```bash
+# JavaScript workspace (member web + landing page)
+pnpm install
 
-3. **Run the development servers:**
-   ```bash
-   pnpm run dev
-   ```
+# Django API
+cd apps/backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver 0.0.0.0:8000
 
-## Pull Request Process
+# Member web app
+cd ../..
+pnpm --filter web dev
+```
 
-We follow an issue-first workflow to ensure smooth collaboration:
+Optional infrastructure (PostgreSQL, Redis, LiveKit) can be started with `docker compose up -d`. Update `apps/backend/.env` with `DATABASE_URL` / `REDIS_URL` if you use it.
 
-1. **Open an Issue First:** Before initiating code changes or starting a feature, please search existing issues or open a new issue to outline your proposed changes or feature enhancement.
-2. **Discuss:** Engage with community members and maintainers in the issue discussion to agree on design decisions and implementation details.
-3. **Submit a PR:** Once alignment is reached, submit your Pull Request linking back to the relevant issue.
+The institutional portal lives in the separate `curious-bright-institutional` repository. It uses the same Django API and does not use the retired Express billing service.
 
-### Contributor License Agreement (CLA)
+## What to work on
 
-All first-time contributors must sign our Contributor License Agreement (CLA) before a pull request can be merged. When you submit your first PR, a CLA assistant bot will prompt you to complete the agreement online ([Sign CLA Here](https://github.com/curiousbright/cla-placeholder)).
+Active surfaces:
 
-## Folder Ownership (Phase 1)
+- `apps/backend` — Django REST API, Channels, PostgreSQL/SQLite, Paystack, LiveKit.
+- `apps/web` — member-facing React/Vite app.
+- `apps/landing-page` — marketing site.
 
-This project uses a TypeScript monorepo structure. Below is the ownership table for Phase 1 workspace components:
+Legacy surfaces (`apps/mobile`, `apps/realtime-gateway`, `apps/signaling-service`, most of `packages/`) are not part of the current deploy. Avoid adding new features there unless the issue explicitly targets them.
 
-| Folder | Responsibility / Role |
-| --- | --- |
-| `apps/backend` | Express REST API server — handles auth, user management, and academic submissions |
-| `apps/web` | React + Vite web application (placeholder) |
-| `apps/mobile` | React Native / Expo mobile application (placeholder) |
-| `packages/database` | Shared database schema, migrations, and generated Prisma client |
-| `packages/types` | Shared TypeScript interfaces and type definitions |
-| `packages/validation` | Shared Zod validation schemas for input sanitization |
+## Coding standards
 
-## Coding Standards
+### Backend
 
-- **TypeScript Strict Mode:** All code must pass strict TypeScript type checking (`strict: true`). Avoid using `any` types.
-- **Zod Input Validation:** All API inputs, request payloads, and query parameters must be validated using Zod schemas from `packages/validation`.
-- **Prisma Data Access:** All database queries and operations must go through Prisma ORM using `packages/database`. Raw SQL queries should be avoided unless strictly necessary.
+- Keep authorization and visibility in Django/DRF; never rely on the client to hide private data.
+- Use `visible_posts()` / `can_view_post()` for post reads and visibility-aware realtime groups for events.
+- Public serializers must not expose email or other private account fields.
+- Return the standard `{code, message}` error envelope. Do not add `detail` to API errors.
+- If you change a model, add a migration and run the test suite. Never edit an applied migration.
+- Add regression tests for permissions, visibility, cascade behaviour, billing state and error shapes.
+
+### Frontend
+
+- Go through `src/lib/api.ts` for HTTP; use `apiFetch`, `apiVoid` or `apiDownload` so auth refresh and global alerts behave consistently.
+- Preserve the paper-notebook design tokens and shared component classes in `src/index.css`. Do not introduce a separate design system.
+- Keep the backend as the source of truth for follow/like/visibility state; optimistic UI must roll back on failure.
+- Heavy routes (video room and PDF reader) should remain lazy-loaded.
+- Verify mobile layouts, keyboard navigation and modal focus behaviour.
+
+## Validation
+
+```bash
+# Backend
+cd apps/backend
+.venv/bin/python manage.py check
+.venv/bin/python manage.py makemigrations --check --dry-run
+.venv/bin/python manage.py test
+
+# Member web
+pnpm --filter web build
+
+# Institutional portal (separate repo)
+cd ../curious-bright-institutional
+pnpm --filter institutional-web build
+```
+
+No change is ready to merge if the backend suite or either build fails. For UI changes, include a short manual smoke test in the PR description.
+
+## Pull requests
+
+1. Link the issue and describe the user-visible change.
+2. Explain any API/schema changes and any migration.
+3. Include validation output (`Tests`, `Build`).
+4. Keep commits logical and focused; do not mix unrelated refactors with a bug fix.
+5. Update documentation when setup, environment variables, API contracts or deployment behaviour changes.
+
+## Contributor License Agreement
+
+First-time contributors must sign the Contributor License Agreement before a pull request can be merged. The CLA assistant will prompt you on your first PR.
+
+## Questions
+
+Open an issue with the `question` label or start a discussion. For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

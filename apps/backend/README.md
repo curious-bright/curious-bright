@@ -1,232 +1,257 @@
 # Curious Bright Backend (Django)
 
-Django 5.2 + DRF + SimpleJWT + PostgreSQL API with a Unfold-powered admin.
-Replaces the retired Express backend.
+Django 5.2 + Django REST Framework + SimpleJWT + Channels + PostgreSQL, with a Unfold-powered admin. This is the authoritative API for the member web app and the institutional portal; the old Express backend is retired.
 
 ## Quick start (local, SQLite)
 
 ```bash
 cd apps/backend
-python3.14 -m venv venv            # already prepared in this repo
-venv/bin/pip install -r requirements.txt
-venv/bin/python manage.py migrate
-ADMIN_USERNAME=learnadmin ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='Str0ng!DevPass99' \
-  venv/bin/python manage.py ensure_admin
-venv/bin/python manage.py runserver 8765
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env                 # optional but recommended
+.venv/bin/python manage.py migrate
+
+# First admin — set ADMIN_USERNAME/ADMIN_EMAIL/ADMIN_PASSWORD in .env first.
+.venv/bin/python manage.py ensure_admin
+
+.venv/bin/python manage.py runserver 0.0.0.0:8000
 ```
 
-With `DATABASE_URL` unset, SQLite (`db.sqlite3`) is used automatically. Production
-must set `DATABASE_URL` (PostgreSQL) — see [Deployment](#deployment-northflank).
+`config/settings.py` loads `apps/backend/.env` automatically. Environment variables already present in the process take precedence. With `DATABASE_URL` empty, SQLite (`db.sqlite3`) is used automatically. Production must use PostgreSQL.
+
+Run `manage.py check` and `manage.py makemigrations --check --dry-run` before shipping schema changes.
 
 ## Environment variables
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `DJANGO_SECRET_KEY` | **prod yes** | dev fallback (insecure) | Django secret; set a long random value in production |
-| `DJANGO_DEBUG` | no | `true` | `true/1/yes/on` enables debug; production must be `false` |
+| `DJANGO_SECRET_KEY` | **prod yes** | insecure dev fallback | Django secret; use a long random value in production |
+| `DJANGO_DEBUG` | no | `true` | `true/1/yes/on`; production must be `false` |
 | `DJANGO_ALLOWED_HOSTS` | **prod yes** | `localhost,127.0.0.1` | Comma-separated hostnames |
-| `CSRF_TRUSTED_ORIGINS` | **prod yes** | `http://localhost:5173,...` | Comma-separated origins for CSRF |
-| `DATABASE_URL` | **prod yes** | — | `postgres://user:pass@host:5432/db`; unset → SQLite |
-| `USE_SQLITE` | no | `false` | Force SQLite even if `DATABASE_URL` set (local only) |
-| `CORS_ALLOWED_ORIGINS` | no | `http://localhost:5173,...` | Comma-separated browser origins |
-| `ADMIN_USERNAME` | no (optional) | — | Bootstrap superuser username; `start.sh` skips `ensure_admin` when unset |
-| `ADMIN_EMAIL` | no (optional) | — | Bootstrap superuser email |
-| `ADMIN_PASSWORD` | no (optional) | — | Bootstrap superuser password (min 8 chars enforced by Django) |
-| `REDIS_URL` | prod recommended | — | Enables Channels Redis + multiple uvicorn workers; without it WebSockets use in-memory and workers=1 |
-| `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Institution dashboard used in invitation links |
-| `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Web client URL; billing callback is derived from it |
-| `BILLING_CALLBACK_URL` | no | `${APP_FRONTEND_URL}/payment/verify` | Where Paystack returns after checkout |
+| `CSRF_TRUSTED_ORIGINS` | **prod yes** | local web origins | Comma-separated origins for CSRF |
+| `DATABASE_URL` | **prod yes** | empty → SQLite | `postgres://user:pass@host:5432/db` |
+| `USE_SQLITE` | no | `false` | Force SQLite locally |
+| `CORS_ALLOWED_ORIGINS` | **prod yes** | local web/portal origins | Browser origins allowed to call the API and open WebSockets |
+| `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | — | Bootstrap superuser for `ensure_admin`; never commit real values |
+| `REDIS_URL` | prod recommended | — | Channels Redis layer; required for multiple ASGI workers |
+| `LIVEKIT_URL` | video | — | Public LiveKit WebSocket URL (`wss://…`) |
+| `LIVEKIT_API_KEY` | video | — | LiveKit API key |
+| `LIVEKIT_API_SECRET` | video | — | Server-only LiveKit secret |
+| `LIVEKIT_TOKEN_TTL_SECONDS` | no | `7200` | Video token lifetime |
 | `EMAIL_BACKEND` | no | console | SMTP backend for invitations, e.g. `django.core.mail.backends.smtp.EmailBackend` |
 | `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials |
 | `DEFAULT_FROM_EMAIL` | no | `no-reply@curiousbright.com.ng` | Invitation sender |
-| `PAYSTACK_PUBLIC_KEY` | billing | — | Public key (safe for clients) |
-| `PAYSTACK_SECRET_KEY` | billing | — | Server key; also verifies webhook HMAC-SHA512 signatures |
-| `PAYSTACK_WEBHOOK_SECRET` | no | falls back to secret key | Separate webhook secret if configured in Paystack |
-| `PAYSTACK_API_BASE` | no | `https://api.paystack.co` | Override for tests/sandbox proxies |
-| `BILLING_PRO_NGN` | no | `500000` | Pro price in kobo (₦5,000) |
-| `BILLING_PRO_USD` | no | `1200` | Pro price in cents ($12) |
+| `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Institutional portal base used in invitation links |
+| `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Member app URL; billing callback derives from it |
+| `BILLING_CALLBACK_URL` | no | `${APP_FRONTEND_URL}/payment/verify` | Paystack return URL |
+| `PAYSTACK_PUBLIC_KEY` | billing | — | Public key |
+| `PAYSTACK_SECRET_KEY` | billing | — | Server key and default webhook signature secret |
+| `PAYSTACK_WEBHOOK_SECRET` | no | falls back to secret key | Separate webhook secret |
+| `PAYSTACK_API_BASE` | no | `https://api.paystack.co` | Test/sandbox override |
+| `BILLING_PRO_NGN` | no | `500000` | Legacy pro fallback in kobo |
+| `BILLING_PRO_USD` | no | `1200` | Legacy pro fallback in cents |
+| `SOFT_DELETE_UNDO_SECONDS` | no | `300` | Client undo/restore window |
+| `SOFT_DELETE_RETENTION_DAYS` | no | `30` | Purge horizon |
 
-Fixed (not env-tunable): JWT access 30 min / refresh 7 days with rotation +
-blacklisting; throttle rates `anon 200/min`, `user 600/min`, `auth 10/min`
-(login endpoint); pagination page size 20.
+Fixed behaviour: JWT access 30 minutes / refresh 7 days with rotation and blacklisting; throttles `anon 200/min`, `user 600/min`, `auth 10/min`; page size 20.
+
+Billing plan prices are seeded through `billing.PlanTier` migrations. `PLAN_DEFINITIONS` in `apps/billing/plans.py` is the fallback, not the production source of truth.
 
 ## Admin bootstrap
 
-- `venv/bin/python manage.py ensure_admin` — idempotent. Run directly it
-  **fails loudly** with a `CommandError` if `ADMIN_USERNAME/EMAIL/PASSWORD` are
-  missing. Creates a `is_staff` + `is_superuser` user (profile auto-created via
-  `post_save` signal). Never resets the password of an existing admin (rotate it
-  manually in Django admin or `changepassword`).
-- `start.sh` only calls it when all three `ADMIN_*` vars are set; otherwise it
-  logs a skip message and the deploy continues. Create the superuser yourself
-  from the server shell instead: `python manage.py createsuperuser`.
-- **Admin dashboard:** `/admin/` logs in with username + password and runs on
-  the Django Unfold theme (light/dark, branded navigation). It shows metric
-  cards — member, post, open-report, pending-application, room, comment,
-  research-document and badge counts — a 14-day activity chart, review-status
-  donut, subject mix, top contributors, and recent-activity panels (posts
-  awaiting review, open reports, pending moderator applications, newest
-  members).
-- Data migration `accounts/0002_bootstrap_admin` runs the same logic at deploy
-  time but is **lenient**: if the env vars are missing it is a no-op, so builds
-  don't break.
+- `.venv/bin/python manage.py ensure_admin` is idempotent. Run directly, it fails loudly if `ADMIN_USERNAME`, `ADMIN_EMAIL` or `ADMIN_PASSWORD` are missing. It creates an `is_staff` + `is_superuser` user. The profile is created by a signal.
+- It never resets an existing admin's password. Rotate passwords with Django admin or `manage.py changepassword`.
+- `scripts/start.sh` calls it only when all three `ADMIN_*` variables are set; otherwise it logs a skip and continues.
+- Data migration `accounts/0002_bootstrap_admin` applies the same bootstrap leniently, so a deploy without admin variables still succeeds.
+- Admin dashboard: `/admin/` uses Django Unfold (username + password) with member/post/report/room/research/badge metrics, activity chart, review-status and subject charts, top contributors and recent activity.
 
-## Deployment (Northflank)
+## API overview
 
-- **Image:** built from the repository root `Dockerfile`. The entrypoint is
-  `apps/backend/scripts/start.sh`, which runs `migrate --noinput`,
-  `ensure_admin` (only when `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`
-  are all set), `collectstatic --noinput`, then uvicorn (ASGI) on `${PORT:-8000}`.
-  With `REDIS_URL` set it runs 3 workers; otherwise one worker and in-memory
-  Channels.
-- **Database:** link a Northflank PostgreSQL addon to the service and expose its
-  connection string as `DATABASE_URL`. Keep `DJANGO_DEBUG=false`.
-- **Required secrets:** `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
-  `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_*` are optional —
-  drop them and run `python manage.py createsuperuser` in the platform shell.
-- **Realtime:** link a Northflank Redis addon and set `REDIS_URL`; without it
-  WebSockets still work but only within a single worker.
-- **Billing:** set `PAYSTACK_SECRET_KEY` and point the Paystack dashboard
-  webhook at `https://api.curiousbright.com.ng/api/billing/webhook/paystack/`.
-  The endpoint rejects unsigned requests and is idempotent. USD checkout also
-  requires USD to be enabled on the Paystack account.
-- **First boot:** expect one `Applying …` line per migration, then
-  `collectstatic`, then gunicorn startup. Verify with `GET /healthz/`
-  (`200 {"status": "ok", "database": true}`). `render.yaml` is a legacy template and is not used by Northflank.
-- **Troubleshooting stale databases:** `relation "accounts_user" does not exist`
-  during `accounts.0002_bootstrap_admin` means `django_migrations` records
-  `accounts.0001_initial` while the table was never created (partial deploy).
-  Confirm with `\dt` and `SELECT * FROM django_migrations WHERE app='accounts';`.
-  For a fresh environment, reset the schema and redeploy:
+All REST paths below are prefixed with `/api/`. Unless noted, endpoints expect trailing slashes and list responses are paginated as `{count, next, previous, results}`.
 
-  ```sql
-  DROP SCHEMA public CASCADE;
-  CREATE SCHEMA public;
-  ```
+### Authentication and account
 
-  Do not delete migration rows selectively — other apps may be recorded without
-  their tables too.
-- **Media files:** `MEDIA_ROOT` is inside the container, so uploaded PDFs are
-  lost on redeploy. Mount a persistent volume at `apps/backend/media` until the
-  S3-compatible storage backend is wired up.
+- `POST auth/register/`
+- `POST auth/token/` — username **or** email; rate limited
+- `POST auth/token/refresh/` — rotation + blacklisting
+- `POST auth/logout/`
+- `GET/PATCH auth/me/`
+- `POST auth/change-password/`
+- `GET auth/export/` — JSON download of account data
+- `POST auth/delete-account/` — requires password + `"delete my account"`; blocked for organization owners (409 `organization_owner`)
 
-## API overview (all JSON, trailing slashes)
+### Profiles and follows
 
-- Organizations: `GET/POST /api/organizations/`, `GET/PATCH/DELETE /api/organizations/<slug>/`,
-  `GET /api/organizations/<slug>/members/`, `POST /api/organizations/<slug>/members/invite/`,
-  `PATCH/DELETE /api/organizations/<slug>/members/<id>/`,
-  `GET /api/organizations/<slug>/invitations/`,
-  `DELETE /api/organizations/<slug>/invitations/<id>/`,
-  `GET /api/organizations/invitations/me/`,
-  `POST /api/organizations/invitations/<uuid>/accept/`,
-  `POST /api/organizations/join-by-domain/`,
-  `GET /api/organizations/<slug>/stats/`, `GET /api/organizations/<slug>/audit-logs/`
-  - Roles: owner > admin > moderator > teacher/student > member. Admins invite and
-    manage lower roles; only owners deactivate an organization or manage billing.
-  - Seat limits: Free 50, Pro 500, Enterprise unlimited (`0`); pending invitations
-    count against seats. New accounts auto-accept matching invitations and
-    auto-join an organization with `auto_join_domain` enabled.
-- Billing: `GET /api/billing/plans/?currency=NGN|USD`,
-  `POST /api/billing/checkout/` (`{organization, plan_code, currency}`),
-  `GET /api/billing/payments/<reference>/`,
-  `POST /api/billing/payments/<reference>/verify/`,
-  `POST /api/billing/webhook/paystack/` (HMAC-SHA512 signature required),
-  `GET /api/organizations/<slug>/subscription/`,
-  `POST /api/organizations/<slug>/subscribe/`
+- `GET auth/profiles/<username>/` — public profile; never exposes email; post count reflects what the viewer may see
+- `POST/DELETE auth/profiles/<username>/follow/`
+- `GET auth/profiles/<username>/is-following/`
+- `GET auth/profiles/<username>/followers/`
+- `GET auth/profiles/<username>/following/`
 
+### Community
 
-- Auth: `POST /api/auth/register/`, `POST /api/auth/token/` (username **or**
-  email), `POST /api/auth/token/refresh/`, `POST /api/auth/logout/` (blacklists),
-  `GET/PATCH /api/auth/me/`
-- Profiles: `GET /api/profiles/<username>/`, `PATCH /api/profiles/me/`,
-  `POST/DELETE /api/profiles/<username>/follow/`
-- Community: `GET/POST /api/posts/`, `GET/DELETE /api/posts/<id>/`,
-  `GET /api/feed/?tab=following|discover`, `GET/POST /api/posts/<id>/equations/`,
-  `GET/POST /api/posts/<id>/comments/`, `POST /api/comments/<id>/replies/`,
-  `POST/DELETE /api/posts/<id>/like/`, `POST/DELETE /api/comments/<id>/helpful/`,
-  `POST /api/posts/<id>/accept-answer/`, `POST /api/posts/<id>/solve/`,
-  `GET /api/notifications/?unread=true`, `POST /api/notifications/read/`
-  - Post filters: `subject`, `level`, `kind`, `search`, `author`, `status`
-    (`published|pending|rejected`), `attachment` (`only` = papers with a PDF,
-    `none` = plain notes). All list endpoints are paginated:
-    `{count, next, previous, results}` (`page_size=20`).
-  - Papers: `POST /api/posts/` accepts multipart `attachment` (PDF, ≤25 MB) →
-    saved as `pending` (needs moderator approval) with `attachment_url` in the
-    response; posts without an attachment publish immediately.
-- Moderation: `POST /api/posts/<id>/flag/` (body `{reason}`, one report per
-  user per post), `GET /api/moderation/queue/` (pending posts),
-  `POST /api/moderation/queue/<id>/approve|reject/`,
-  `GET /api/moderation/reports/` (unresolved),
-  `POST /api/moderation/reports/<id>/resolve/`,
-  `GET/POST /api/moderator-applications/` (motivation ≥80 chars, non-empty
-  `subjects`), `GET /api/moderator-applications/me/` (404 = none yet),
-  `POST /api/moderator-applications/<id>/approve|decline/` (staff only;
-  approve grants `is_moderator`). Queue/reports require `is_moderator` or
-  staff; `/api/auth/me/` exposes `is_moderator` and `can_moderate`.
-- Rooms: `GET/POST /api/rooms/`, `GET /api/rooms/<id>/`, `POST/DELETE
-  /api/rooms/<id>/join/`, `GET /api/rooms/<id>/members/`,
-  `GET/POST /api/rooms/<id>/messages/` (`?after=<id>` for incremental
-  polling; first load returns the latest 100 in chronological order).
-- Search: `GET /api/search/?q=` → `{posts, rooms, users}` (max 10 each,
-  public; empty query returns empty lists).
-- Gamification: badges appear on profile responses; awarded automatically
-  (`award_badge`) — Teacher (helpful/accepted comment), Solver (accepted answer
-  / question solved), Collaborator (co-authored revision)
-- Research: `GET/POST /api/documents/`, `GET/PATCH /api/documents/<id>/`,
-  `POST /api/documents/<id>/invite/`, `GET /api/invitations/`,
-  `POST /api/invitations/<id>/accept|decline/`, `POST /api/documents/<id>/edit/`
-  (creates a revision → Collaborator badge)
+- `GET/POST posts/`
+- `GET/PATCH/DELETE posts/<id>/`
+- `POST posts/<id>/restore/`
+- `POST/DELETE posts/<id>/like/`
+- `POST posts/<id>/solve/`
+- `GET posts/<id>/activity/` — moderation/audit activity
+- `GET/POST posts/<id>/comments/`
+- `GET/PATCH/DELETE comments/<id>/`
+- `POST comments/<id>/restore/`
+- `POST/DELETE comments/<id>/helpful/`
+- `POST comments/<id>/accept/`
+- `GET feed/discover/`
+- `GET feed/following/`
+- `GET notifications/?unread=true`
+- `POST notifications/read-all/`
+
+Post filters include `subject`, `level`, `kind`, `search`, `author`, `status`, and `attachment` (`only`/`none`). `POST posts/` accepts JSON or multipart with `attachment` (PDF ≤ 25 MB). PDFs enter `pending` review; plain notes publish immediately. Updates accept `expected_updated_at`; stale updates return 409 `conflict`.
+
+Visibility options are `public`, `followers`, and `room_only` (requires `room`). See `apps/community/visibility.py` — the same rules power HTTP and WebSocket access.
+
+### Moderation
+
+- `POST posts/<id>/flag/`
+- `GET moderation/queue/`
+- `POST moderation/queue/<id>/approve/`
+- `POST moderation/queue/<id>/reject/`
+- `GET moderation/reports/`
+- `POST moderation/reports/<id>/resolve/`
+- `GET/POST moderator-applications/`
+- `GET moderator-applications/me/`
+- `POST moderator-applications/<id>/approve/` or `/decline/`
+
+### Rooms, live video and whiteboard
+
+- `GET/POST rooms/`
+- `GET/PATCH/DELETE rooms/<id>/`
+- `POST rooms/<id>/restore/`
+- `POST/DELETE rooms/<id>/join/`
+- `GET rooms/<id>/members/`
+- `GET/POST rooms/<id>/messages/` — `?after=<id>` returns newer messages
+- `POST rooms/<id>/livekit-token/` — 503 `livekit_not_configured` when env is missing
+- `GET/DELETE rooms/<id>/whiteboard/` — snapshot and host-only clear
+
+Join a room before reading/sending messages, minting a video token or opening the whiteboard. Room hosts and organization admins/owners can edit or delete rooms.
+
+### Research
+
+- `GET/POST research/`
+- `GET/PATCH/DELETE research/<id>/`
+- `POST research/<id>/restore/`
+- `POST research/<id>/invite/`
+- `GET research/<id>/revisions/`
+- `POST research/<id>/revisions/<revision_id>/restore/`
+- `GET research/invitations/`
+- `POST research/invitations/<id>/respond/`
+
+Saving a document creates a revision; restoring a revision creates a new revision rather than rewriting history.
+
+### Organizations and students
+
+- `GET/POST organizations/`
+- `GET/PATCH/DELETE organizations/<slug>/`
+- `GET organizations/<slug>/members/`
+- `POST organizations/<slug>/members/invite/`
+- `PATCH/DELETE organizations/<slug>/members/<id>/`
+- `POST organizations/<slug>/members/link/`
+- `GET organizations/<slug>/invitations/`
+- `DELETE organizations/<slug>/invitations/<id>/`
+- `POST organizations/<slug>/students/`
+- `POST organizations/<slug>/students/import/`
+- `GET organizations/<slug>/members.csv`
+- `GET organizations/students/template/`
+- `GET organizations/<slug>/stats/`
+- `GET organizations/<slug>/audit-logs/`
+- `GET organizations/invitations/me/`
+- `POST organizations/invitations/<uuid>/accept/`
+- `POST organizations/join-by-domain/`
+
+Roles are `owner > admin > moderator > teacher > student > member`. Owners manage billing and deactivation; admins manage lower roles. Pending invitations and active members count against the seat limit. New accounts auto-accept matching invitations and can auto-join an organization with `auto_join_domain`.
+
+### Billing
+
+- `GET billing/plans/?currency=NGN|USD&interval=month|year` — currency can also be inferred from `CF-IPCountry` / `X-Country-Code`
+- `POST billing/checkout/` — `{organization, plan_code, currency, interval}`
+- `GET billing/payments/<reference>/`
+- `POST billing/payments/<reference>/verify/`
+- `POST billing/webhook/paystack/` — HMAC-SHA512 signature required, idempotent
+- `GET organizations/<slug>/subscription/`
+- `POST organizations/<slug>/subscribe/` — portal-compatible checkout
+
+Amounts are stored in minor units (kobo/cents). USD checkout requires USD enabled on Paystack. A missing or invalid provider configuration returns `billing_not_configured` / `payment_provider_error` rather than a 500.
+
+### Search and health
+
+- `GET search/?q=` — public, capped results across posts, rooms and users
+- `GET healthz/` or `/` — `{"status": "ok", "database": true}`
+
+## Realtime (Channels / ASGI)
+
+WebSocket URL prefix: `/ws/`. Authenticate with `?token=<access>`.
+
+- `/ws/feed/` — discover feed updates
+- `/ws/posts/<id>/` — post discussion updates after a visibility check
+- `/ws/notifications/` — signed-in notifications
+- `/ws/rooms/<room_id>/` — chat, typing and presence for members
+- `/ws/rooms/<room_id>/whiteboard/` — strokes, live draw relay, undo and host clear
+
+Feed events are published only to groups appropriate to their visibility (`feed.discover`, `feed.user.<id>`, `post.<id>`, `room.<id>`). Private content must never reach the discover group. Room and whiteboard sockets reject non-members during connection.
+
+Redis is required for multiple ASGI workers. Without `REDIS_URL`, the in-memory layer works only inside a single process.
 
 ## Error contract
 
-Every error (4xx/5xx on `/api/…`) returns:
+Every `/api/` error returns exactly:
 
 ```json
-{ "code": "validation_error", "message": "Human readable.", "details": { "field": ["…"] } }
+{ "code": "validation_error", "message": "Human readable message." }
 ```
 
-Codes: `validation_error`, `unauthorized`, `unauthenticated`, `not_found`,
-`forbidden`, `throttled`, `internal_error`. The frontend `lib/api.ts` maps these
-to global alerts; 401 triggers a single-flight token refresh, then a global
-alert if refresh fails.
+Validation errors are flattened into the message; there is no separate `details` field. Unhandled API exceptions and HTML 404s are converted by middleware. Each response also carries `X-Request-ID` for tracing.
 
-## Edge cases handled (and worth knowing)
+Common codes: `validation_error`, `bad_request`, `unauthenticated`, `unauthorized`, `forbidden`, `not_found`, `method_not_allowed`, `unsupported_media_type`, `throttled`, `conflict`, `restore_window_expired`, `confirmation_required`, `invalid_password`, `invalid_signature`, `seat_limit_reached`, `plan_not_purchasable`, `billing_not_configured`, `payment_provider_error`, `livekit_not_configured`, `organization_owner`, `no_organization`, `internal_error`.
 
-- **Duplicate badges**: `award_badge` uses `get_or_create` — awarding the same
-  badge twice is a no-op (no duplicates, no error).
-- **Self-follow / duplicate follow**: blocked server-side with 400
-  `validation_error`; unfollowing someone you don't follow → 404 `not_found`.
-- **Optimistic UI rollback**: frontend like/follow toggles roll back the local
-  state if the API call returns `null`/fails, and re-sync from server counts.
-- **Permission errors**: modifying someone else's post/comment → 403 `forbidden`;
-  unauthenticated writes → 401 `unauthenticated` (shape verified).
-- **Login rate limit**: 10/min per scope → 429 `throttled` with the same error
-  shape.
-- **Refresh reuse**: rotated/blacklisted refresh tokens → 401; frontend logs out
-  and shows one global alert (no alert storms — single-flight refresh).
-- **Mentions**: `@username` in posts/comments creates notifications only for
-  mentioned users who exist; self-mentions are skipped.
-- **Admin password rotation**: `ensure_admin` never overwrites an existing
-  admin's password — rotate manually (Django admin → users → password, or
-  `manage.py changepassword`).
-- **SQLite fallback**: convenient locally, but production must set
-  `DATABASE_URL`; `start.sh` runs migrations + `ensure_admin` before gunicorn.
-- **Attachment review gate**: posts with a PDF are created as `pending` and are
-  hidden from everyone except their author and moderators (`404` for others)
-  until approved. Rejecting keeps them hidden permanently (the author is
-  notified either way).
-- **Reports**: a user cannot report their own post or report the same post
-  twice (400 `validation_error`); resolving an already-resolved report is
-  idempotent. Reports surface post title/author so the queue renders without
-  extra fetches.
-- **Moderator applications**: one application per user (`400` on duplicates);
-  `/me/` returns `404 not_found` when there is none (the UI treats that as
-  "not applied yet"); approving sets `is_moderator` and unlocks the queue.
-- **Room polling**: clients poll `?after=<last id>` every few seconds and
-  dedupe by message id; the first fetch returns the latest 100 messages in
-  chronological order, so reconnects never replay history.
-- **Search**: public, case-insensitive `icontains` across post titles/bodies,
-  room names/descriptions, and usernames; results are capped per section.
-- **HTML caching / dev media**: uploaded PDFs are served from `/media/` only
-  when `DEBUG=true`; production should serve them via the reverse proxy or
-  object storage.
+## Soft delete and audit
+
+Posts, comments, rooms and research documents extend `SoftDeleteModel`:
+
+- Normal querysets hide deleted rows; `all_objects` includes them.
+- Deletes set `is_deleted`, `deleted_at`, `deleted_by` and write a `ContentAuditLog` entry.
+- The client shows an undo notice; restore endpoints allow undo within `SOFT_DELETE_UNDO_SECONDS` (410 `restore_window_expired` afterwards, except staff/moderators).
+- Deleting a room cascades to room-only posts; restoring the room restores only posts deleted in that same cascade.
+- Comment tombstones keep thread structure: authors and moderators see all their tombstones; other members do not see deleted top-level comments unless visible replies depend on them.
+- Permanent purge is controlled by `SOFT_DELETE_RETENTION_DAYS` and `hard_delete()`.
+
+## Tests
+
+```bash
+cd apps/backend
+.venv/bin/python manage.py test
+```
+
+Current suite: **106 tests**. It covers the error contract, visibility, PII-safe serializers, comment tombstones, edit conflicts, soft delete/undo, rooms, LiveKit error paths, whiteboard persistence, WebSocket permissions, research revisions, organization roles/CSV/students, billing, viewer-accurate profile counts, and organization-owner deletion guards.
+
+## Deployment (Northflank / Docker)
+
+- Build the repository root `Dockerfile`; the entrypoint is `apps/backend/scripts/start.sh`.
+- The image starts with `migrate --noinput`, optional `ensure_admin`, `collectstatic --noinput`, then uvicorn (ASGI) on `${PORT:-8000}`. With `REDIS_URL`, it uses 3 workers by default; otherwise one worker and the in-memory channel layer.
+- Link a PostgreSQL addon and expose its URL as `DATABASE_URL`. Keep `DJANGO_DEBUG=false`.
+- Required secrets: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_*` are optional.
+- For multi-worker realtime, link Redis and set `REDIS_URL`.
+- For video, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
+- For billing, set `PAYSTACK_SECRET_KEY`; point the Paystack webhook at `https://<api-host>/api/billing/webhook/paystack/`.
+- Media is served from the container filesystem (even with debug off). Attach a persistent volume at `apps/backend/media` or switch to object storage.
+- Verify a deploy with `GET /healthz/`, then `GET /api/posts/`.
+
+### Stale database migration troubleshooting
+
+`relation "accounts_user" does not exist` while applying `accounts.0002_bootstrap_admin` means `django_migrations` recorded the initial migration but the table was never created (partial deploy). For a fresh environment, reset the schema and redeploy:
+
+```sql
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+```
+
+Do not delete migration rows selectively; other apps may be similarly inconsistent.
