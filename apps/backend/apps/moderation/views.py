@@ -18,6 +18,7 @@ from .serializers import (
     ReportCreateSerializer,
     ReportSerializer,
 )
+from .services import notify_application_decision
 
 User = get_user_model()
 
@@ -174,27 +175,24 @@ class ApplicationDecisionView(APIView):
 
     def post(self, request, pk, decision):
         application = get_object_or_404(ModeratorApplication, pk=pk, status=ModeratorApplication.Status.PENDING)
+        note = str(request.data.get("note") or "").strip()[:500]
         if decision == "approve":
             application.status = ModeratorApplication.Status.APPROVED
             application.reviewed_by = request.user
-            application.save(update_fields=["status", "reviewed_by", "updated_at"])
-            User.objects.filter(pk=application.user_id).update(is_moderator=True)
-            notify(
-                application.user,
-                Notification.VERB.REVIEW,
-                actor=request.user,
-                text="Your moderator application was approved — welcome to the review team!",
+            application.review_note = note
+            application.save(
+                update_fields=["status", "reviewed_by", "review_note", "updated_at"]
             )
+            User.objects.filter(pk=application.user_id).update(is_moderator=True)
+            notify_application_decision(application, request.user, True, note)
         elif decision == "decline":
             application.status = ModeratorApplication.Status.REJECTED
             application.reviewed_by = request.user
-            application.save(update_fields=["status", "reviewed_by", "updated_at"])
-            notify(
-                application.user,
-                Notification.VERB.REVIEW,
-                actor=request.user,
-                text="Your moderator application was not approved this time",
+            application.review_note = note
+            application.save(
+                update_fields=["status", "reviewed_by", "review_note", "updated_at"]
             )
+            notify_application_decision(application, request.user, False, note)
         else:
             return Response(
                 {"code": "not_found", "message": "Unknown decision."},

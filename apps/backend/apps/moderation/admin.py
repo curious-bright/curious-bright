@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 
 from .models import ModeratorApplication, Report
+from .services import notify_application_decision
 
 User = get_user_model()
 
@@ -42,14 +43,29 @@ class ModeratorApplicationAdmin(admin.ModelAdmin):
         for application in queryset.filter(status=ModeratorApplication.Status.PENDING):
             application.status = ModeratorApplication.Status.APPROVED
             application.reviewed_by = request.user
-            application.save(update_fields=["status", "reviewed_by", "updated_at"])
+            application.review_note = "Approved from the admin review queue."
+            application.save(
+                update_fields=["status", "reviewed_by", "review_note", "updated_at"]
+            )
             User.objects.filter(pk=application.user_id).update(is_moderator=True)
+            notify_application_decision(
+                application, request.user, True, application.review_note
+            )
             updated += 1
         self.message_user(request, f"{updated} application(s) approved; moderator role granted.")
 
     @admin.action(description="Decline selected applications")
     def decline_applications(self, request, queryset):
-        updated = queryset.filter(status=ModeratorApplication.Status.PENDING).update(
-            status=ModeratorApplication.Status.REJECTED, reviewed_by=request.user
-        )
+        updated = 0
+        for application in queryset.filter(status=ModeratorApplication.Status.PENDING):
+            application.status = ModeratorApplication.Status.REJECTED
+            application.reviewed_by = request.user
+            application.review_note = "Declined from the admin review queue."
+            application.save(
+                update_fields=["status", "reviewed_by", "review_note", "updated_at"]
+            )
+            notify_application_decision(
+                application, request.user, False, application.review_note
+            )
+            updated += 1
         self.message_user(request, f"{updated} application(s) declined.")
