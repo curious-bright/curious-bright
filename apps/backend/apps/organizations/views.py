@@ -4,10 +4,11 @@ import io
 import secrets
 import string
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -15,27 +16,51 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from urllib.parse import urlparse
+import uuid
 
 from apps.accounts.models import Profile
+from apps.community.models import Notification
+from apps.community.notifications import notify
 
 from .models import (
     Organization,
     OrganizationAuditLog,
     OrganizationInvitation,
+    OrganizationJoinRequest,
     OrganizationMembership,
+    OrganizationVerification,
+    OrganizationVerificationEvent,
 )
 from .serializers import (
     InvitationSerializer,
     InviteRequestSerializer,
+    JoinRequestCreateSerializer,
+    JoinRequestDecisionSerializer,
     MemberSerializer,
     MemberUpdateSerializer,
     MyInvitationSerializer,
     OrganizationCreateSerializer,
+    OrganizationJoinRequestSerializer,
+    OrganizationSearchSerializer,
     OrganizationSerializer,
     OrganizationUpdateSerializer,
+    OrganizationVerificationSerializer,
+    VerificationSubmitSerializer,
     invite_expiry,
 )
-from .services import audit, can_manage, role_rank, send_invitation_email
+from .services import (
+    approve_verification,
+    audit,
+    can_manage,
+    reject_verification,
+    role_rank,
+    send_invitation_email,
+    send_join_decision_email,
+    send_join_request_email,
+    send_verification_confirmation_email,
+    verification_event,
+)
 
 User = get_user_model()
 
@@ -81,6 +106,46 @@ def _has_seat(org):
     return org.seat_limit == 0 or org.seats_used < org.seat_limit
 
 
+def _require_verified(org):
+    if not org.can_grant_access:
+        raise PermissionDenied(
+            "This organization must be verified before it can add or invite members."
+        )
+
+
+def _request_origin(request):
+    origin = (request.headers.get("Origin") or "").strip().rstrip("/")
+    if origin:
+        return origin
+    referer = (request.headers.get("Referer") or "").strip()
+    if not referer:
+        return ""
+    parsed = urlparse(referer)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+
+def _is_institutional_request(request):
+    if request.headers.get("X-Client-App", "").lower() == "institutional":
+        return True
+    origin = _request_origin(request)
+    allowed = getattr(settings, "ORG_REGISTRATION_ALLOWED_ORIGINS", [])
+    return bool(origin and origin in allowed)
+
+
+def _notify_org_managers(org, actor, text):
+    managers = (
+        org.memberships.filter(
+            role__in=[OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN],
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        .select_related("user")
+    )
+    for membership in managers:
+        notify(membership.user, Notification.VERB.ORGANIZATION, actor=actor, text=text)
+
+
 def _can_assign(actor_membership, role):
     if role == OrganizationMembership.Role.OWNER:
         return False
@@ -106,6 +171,17 @@ class OrganizationListCreateView(generics.ListCreateAPIView):
         return OrganizationSerializer
 
     def create(self, request, *args, **kwargs):
+        if not _is_institutional_request(request):
+            return Response(
+                {
+                    "code": "organization_registration_forbidden",
+                    "message": (
+                        "Institutions are created from the institutional portal at "
+                        f"{getattr(settings, 'ORG_FRONTEND_URL', 'https://org.curiousbright.com.ng')}."
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         org = serializer.save(
@@ -148,7 +224,22 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().update(request, *args, **kwargs)
 
     def perform_update(self, serializer):
+        previous = self.get_object()
+        previous_domain = previous.domain
         org = serializer.save()
+        if previous_domain != org.domain and org.verification_status == Organization.VerificationStatus.VERIFIED:
+            org.verification_status = Organization.VerificationStatus.UNVERIFIED
+            org.verified_at = None
+            org.auto_join_domain = False
+            org.save(
+                update_fields=["verification_status", "verified_at", "auto_join_domain", "updated_at"]
+            )
+            verification_event(
+                org,
+                OrganizationVerificationEvent.Action.REJECTED,
+                self.request.user,
+                "The email domain changed; verification must be renewed.",
+            )
         audit(org, self.request.user, "organization.updated", org)
 
     def destroy(self, request, *args, **kwargs):
@@ -202,6 +293,7 @@ class InviteMembersView(APIView):
     def post(self, request, slug):
         org = _org(slug)
         actor_membership = _require_admin(request, org)
+        _require_verified(org)
         payload = request.data
         emails = payload.get("emails")
         if emails is None and payload.get("email"):
@@ -409,6 +501,7 @@ class AcceptInvitationView(APIView):
             )
 
         org = invitation.organization
+        _require_verified(org)
         membership = org.memberships.filter(user=request.user).first()
         if membership is None and not _has_seat(org):
             return Response(
@@ -444,7 +537,12 @@ class JoinByDomainView(APIView):
     def post(self, request):
         email = (request.user.email or "").lower()
         domain = email.rsplit("@", 1)[-1] if "@" in email else ""
-        org = Organization.objects.filter(domain=domain, auto_join_domain=True, is_active=True).first()
+        org = Organization.objects.filter(
+            domain=domain,
+            auto_join_domain=True,
+            is_active=True,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+        ).first()
         if org is None:
             return Response(
                 {"code": "no_organization", "message": "No organization accepts that email domain."},
@@ -582,6 +680,8 @@ def _add_or_link_member(
     Raises ``ValueError`` for seat/role problems.
     """
     email = (email or "").strip().lower()
+    if not org.can_grant_access:
+        raise ValueError("Verify the organization before adding members.")
     if "@" not in email:
         raise ValueError("A valid email address is required.")
     if not _can_assign(actor_membership, role):
@@ -702,6 +802,7 @@ class BulkStudentImportView(APIView):
     def post(self, request, slug):
         org = _org(slug)
         actor_membership = _require_admin(request, org)
+        _require_verified(org)
         rows = []
 
         upload = request.FILES.get("file")
@@ -787,6 +888,7 @@ class CreateStudentAccountView(APIView):
     def post(self, request, slug):
         org = _org(slug)
         actor_membership = _require_admin(request, org)
+        _require_verified(org)
         email = str(request.data.get("email") or "").strip().lower()
         try:
             membership, user, temp_password, created = _add_or_link_member(
@@ -824,6 +926,7 @@ class LinkMemberAccountView(APIView):
     def post(self, request, slug):
         org = _org(slug)
         actor_membership = _require_admin(request, org)
+        _require_verified(org)
         username = str(request.data.get("username") or "").strip()
         email = str(request.data.get("email") or "").strip().lower()
         user = None
@@ -863,3 +966,435 @@ class LinkMemberAccountView(APIView):
             MemberSerializer(membership, context={"request": request, "can_manage": True}).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class OrganizationSearchView(APIView):
+    """Search verified organizations that members can ask to join."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = (request.query_params.get("q") or "").strip()
+        orgs = Organization.objects.filter(
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            is_active=True,
+        )
+        if query:
+            orgs = orgs.filter(
+                Q(name__icontains=query)
+                | Q(domain__icontains=query)
+                | Q(slug__icontains=query)
+            )
+        orgs = orgs.order_by("name")[:30]
+        return Response(
+            OrganizationSearchSerializer(orgs, many=True, context={"request": request}).data
+        )
+
+
+class OrganizationVerificationView(APIView):
+    """Read or submit the current organization verification application."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        verification = OrganizationVerification.objects.filter(organization=org).first()
+        if verification is None:
+            return Response(
+                {
+                    "status": org.verification_status,
+                    "verification": None,
+                    "can_submit": org.verification_status
+                    in (Organization.VerificationStatus.UNVERIFIED, Organization.VerificationStatus.REJECTED),
+                }
+            )
+        data = OrganizationVerificationSerializer(
+            verification, context={"request": request}
+        ).data
+        data["can_submit"] = org.verification_status in (
+            Organization.VerificationStatus.UNVERIFIED,
+            Organization.VerificationStatus.REJECTED,
+        )
+        return Response(data)
+
+    def post(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        if org.verification_status == Organization.VerificationStatus.VERIFIED:
+            return Response(
+                {"code": "already_verified", "message": "This organization is already verified."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if org.verification_status == Organization.VerificationStatus.PENDING:
+            return Response(
+                {
+                    "code": "verification_pending",
+                    "message": "A verification request is already being reviewed.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = VerificationSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        now = timezone.now()
+
+        verification, created = OrganizationVerification.objects.get_or_create(
+            organization=org,
+            defaults={
+                "legal_name": values["legal_name"],
+                "org_type": values["org_type"],
+                "country": values["country"],
+                "address": values["address"],
+                "website": values["website"],
+                "official_email": values["official_email"],
+                "contact_name": values["contact_name"],
+                "contact_role": values["contact_role"],
+                "contact_email": values["contact_email"],
+                "contact_phone": values.get("contact_phone", ""),
+                "registration_number": values.get("registration_number", ""),
+                "registration_document": values.get("registration_document"),
+                "is_government_funded": values.get("is_government_funded", False),
+                "head_of_institution": values.get("head_of_institution", ""),
+                "submitted_at": now,
+                "attempt": 1,
+            },
+        )
+
+        if not created:
+            email_changed = (
+                verification.official_email.lower() != values["official_email"].lower()
+            )
+            for field in (
+                "legal_name",
+                "org_type",
+                "country",
+                "address",
+                "website",
+                "official_email",
+                "contact_name",
+                "contact_role",
+                "contact_email",
+                "contact_phone",
+                "registration_number",
+                "is_government_funded",
+                "head_of_institution",
+            ):
+                setattr(verification, field, values.get(field, ""))
+            if values.get("registration_document") is not None:
+                verification.registration_document = values["registration_document"]
+            if email_changed:
+                verification.official_email_verified_at = None
+                verification.official_email_token = uuid.uuid4()
+            verification.submitted_at = now
+            verification.reviewed_at = None
+            verification.reviewed_by = None
+            verification.rejection_reason = ""
+            verification.attempt += 1
+            verification.save()
+
+        org.verification_status = Organization.VerificationStatus.PENDING
+        org.verified_at = None
+        org.save(update_fields=["verification_status", "verified_at", "updated_at"])
+
+        event_action = (
+            OrganizationVerificationEvent.Action.SUBMITTED
+            if created
+            else OrganizationVerificationEvent.Action.RESUBMITTED
+        )
+        verification_event(
+            org,
+            event_action,
+            request.user,
+            attempt=verification.attempt,
+        )
+        send_verification_confirmation_email(verification)
+
+        data = OrganizationVerificationSerializer(
+            verification, context={"request": request}
+        ).data
+        data["can_submit"] = False
+        return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class OrganizationVerificationResendView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        verification = get_object_or_404(OrganizationVerification, organization=org)
+        if verification.official_email_verified_at is not None:
+            return Response(
+                {"code": "already_confirmed", "message": "The official email is already confirmed."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if verification.official_email_token is None:
+            verification.official_email_token = uuid.uuid4()
+            verification.save(update_fields=["official_email_token", "updated_at"])
+        sent = send_verification_confirmation_email(verification)
+        verification_event(
+            org,
+            OrganizationVerificationEvent.Action.EMAIL_RESENT,
+            request.user,
+            sent=sent,
+        )
+        return Response({"sent": sent})
+
+
+class OrganizationVerificationEmailConfirmView(APIView):
+    """Confirm an official email from the signed link sent by the portal."""
+
+    permission_classes = []
+
+    def post(self, request, token):
+        verification = get_object_or_404(
+            OrganizationVerification.objects.select_related("organization"),
+            official_email_token=token,
+        )
+        if verification.official_email_verified_at is None:
+            verification.official_email_verified_at = timezone.now()
+            verification.official_email_token = uuid.uuid4()
+            verification.save(
+                update_fields=[
+                    "official_email_verified_at",
+                    "official_email_token",
+                    "updated_at",
+                ]
+            )
+            verification_event(
+                verification.organization,
+                OrganizationVerificationEvent.Action.EMAIL_CONFIRMED,
+                request.user if request.user.is_authenticated else None,
+            )
+        return Response(
+            {
+                "confirmed": True,
+                "organization": verification.organization.name,
+                "official_email": verification.official_email,
+            }
+        )
+
+
+class OrganizationVerificationDocumentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        org = _org(slug)
+        if not request.user.is_staff:
+            _require_admin(request, org)
+        verification = get_object_or_404(OrganizationVerification, organization=org)
+        document = verification.registration_document
+        if not document:
+            return Response(
+                {"code": "not_found", "message": "No verification document was uploaded."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        file_handle = document.open("rb")
+        response = FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=document.name.rsplit("/", 1)[-1],
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class OrganizationJoinRequestCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        org = _org(slug)
+        if not org.is_verified:
+            return Response(
+                {
+                    "code": "organization_not_verified",
+                    "message": "This organization is not verified yet.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not org.allow_join_requests:
+            return Response(
+                {
+                    "code": "join_requests_disabled",
+                    "message": "This organization is not accepting join requests.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if org.memberships.filter(
+            user=request.user, status=OrganizationMembership.Status.ACTIVE
+        ).exists():
+            return Response(
+                {"code": "already_member", "message": "You are already a member."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if org.join_requests.filter(
+            user=request.user, status=OrganizationJoinRequest.Status.PENDING
+        ).exists():
+            return Response(
+                {
+                    "code": "request_pending",
+                    "message": "You already have a pending request for this organization.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = JoinRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        join_request = OrganizationJoinRequest.objects.create(
+            organization=org,
+            user=request.user,
+            message=serializer.validated_data.get("message", ""),
+        )
+        audit(
+            org,
+            request.user,
+            "join_request.created",
+            join_request,
+            message=join_request.message,
+        )
+        _notify_org_managers(
+            org,
+            request.user,
+            f"@{request.user.username} requested to join {org.name}.",
+        )
+        send_join_request_email(org, join_request)
+        return Response(
+            OrganizationJoinRequestSerializer(join_request, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MyOrganizationJoinRequestsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rows = (
+            request.user.organization_join_requests.select_related(
+                "organization", "reviewed_by"
+            )
+            .order_by("-created_at")[:50]
+        )
+        return Response(
+            OrganizationJoinRequestSerializer(
+                rows, many=True, context={"request": request}
+            ).data
+        )
+
+
+class OrganizationJoinRequestListView(OrganizationJoinRequestCreateView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        rows = org.join_requests.select_related("user", "reviewed_by")
+        requested_status = request.query_params.get("status")
+        if requested_status in OrganizationJoinRequest.Status.values:
+            rows = rows.filter(status=requested_status)
+        return Response(
+            OrganizationJoinRequestSerializer(
+                rows[:100], many=True, context={"request": request}
+            ).data
+        )
+
+
+class OrganizationJoinRequestDecisionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug, pk):
+        org = _org(slug)
+        actor_membership = _require_admin(request, org)
+        join_request = get_object_or_404(
+            OrganizationJoinRequest.objects.select_related("user"),
+            pk=pk,
+            organization=org,
+        )
+        if join_request.status != OrganizationJoinRequest.Status.PENDING:
+            return Response(
+                {"code": "already_reviewed", "message": "This request has already been reviewed."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        serializer = JoinRequestDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        decision = serializer.validated_data["decision"]
+        note = serializer.validated_data.get("note", "")
+
+        if decision == "approve":
+            # Approval grants a student seat. The portal disables the button for
+            # unverified organizations, but the API must enforce the rule too.
+            _require_verified(org)
+            if not _has_seat(org):
+                return Response(
+                    {"code": "seat_limit_reached", "message": "Seat limit reached."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            try:
+                _add_or_link_member(
+                    org,
+                    email=join_request.user.email,
+                    actor=request.user,
+                    actor_membership=actor_membership,
+                    role=OrganizationMembership.Role.STUDENT,
+                )
+            except ValueError as exc:
+                return Response(
+                    {"code": "validation_error", "message": str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            join_request.status = OrganizationJoinRequest.Status.APPROVED
+        else:
+            join_request.status = OrganizationJoinRequest.Status.REJECTED
+        join_request.reviewed_by = request.user
+        join_request.reviewed_at = timezone.now()
+        join_request.decision_note = note
+        join_request.save(
+            update_fields=["status", "reviewed_by", "reviewed_at", "decision_note", "updated_at"]
+        )
+        audit(
+            org,
+            request.user,
+            f"join_request.{join_request.status}",
+            join_request,
+            note=note,
+        )
+        notify(
+            join_request.user,
+            Notification.VERB.ORGANIZATION,
+            actor=request.user,
+            text=(
+                f"Your request to join {org.name} was "
+                f"{'approved' if decision == 'approve' else 'declined'}."
+            ),
+        )
+        send_join_decision_email(org, join_request, decision == "approve", note)
+        return Response(
+            OrganizationJoinRequestSerializer(
+                join_request, context={"request": request}
+            ).data
+        )
+
+
+class OrganizationJoinRequestWithdrawView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        join_request = get_object_or_404(
+            OrganizationJoinRequest, pk=pk, user=request.user
+        )
+        if join_request.status != OrganizationJoinRequest.Status.PENDING:
+            return Response(
+                {"code": "already_reviewed", "message": "This request has already been reviewed."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        join_request.status = OrganizationJoinRequest.Status.WITHDRAWN
+        join_request.save(update_fields=["status", "updated_at"])
+        audit(
+            join_request.organization,
+            request.user,
+            "join_request.withdrawn",
+            join_request,
+        )
+        return Response({"status": join_request.status})

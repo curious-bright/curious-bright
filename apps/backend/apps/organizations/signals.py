@@ -25,7 +25,7 @@ def link_pending_invitations(sender, instance, created, **kwargs):
 
     for invitation in invitations:
         org = invitation.organization
-        if not org.is_active:
+        if not org.is_active or not org.can_grant_access:
             continue
         if org.seat_limit and org.seats_used >= org.seat_limit:
             continue
@@ -43,7 +43,12 @@ def link_pending_invitations(sender, instance, created, **kwargs):
         invitation.save(update_fields=["accepted_at", "accepted_by"])
 
     domain = instance.email.rsplit("@", 1)[-1].lower()
-    for org in Organization.objects.filter(domain=domain, auto_join_domain=True, is_active=True):
+    for org in Organization.objects.filter(
+        domain=domain,
+        auto_join_domain=True,
+        is_active=True,
+        verification_status=Organization.VerificationStatus.VERIFIED,
+    ):
         if org.seat_limit and org.seats_used >= org.seat_limit:
             continue
         OrganizationMembership.objects.get_or_create(

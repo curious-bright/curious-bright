@@ -147,6 +147,7 @@ class Notification(models.Model):
         SOLVED = "solved", "marked a post solved"
         RESEARCH = "research", "joined your research document"
         REVIEW = "review", "reviewed your submission"
+        ORGANIZATION = "organization", "organization update"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     actor = models.ForeignKey(

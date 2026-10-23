@@ -51,7 +51,7 @@ application = ProtocolTypeRouter(
         "http": django_asgi_app,
         "websocket": OriginValidator(
             JWTAuthMiddleware(URLRouter(websocket_urlpatterns)),
-            settings.CORS_ALLOWED_ORIGINS,
+            getattr(settings, "WS_ALLOWED_ORIGINS", settings.CORS_ALLOWED_ORIGINS),
         ),
     }
 )

@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.organizations.models import (
@@ -20,7 +21,12 @@ class OrganizationAPITests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.owner)
-        self.org = Organization.objects.create(name="Greenfield University", owner=self.owner)
+        self.org = Organization.objects.create(
+            name="Greenfield University",
+            owner=self.owner,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            verified_at=timezone.now(),
+        )
         OrganizationMembership.objects.create(
             organization=self.org,
             user=self.owner,
@@ -43,6 +49,7 @@ class OrganizationAPITests(TestCase):
             "/api/organizations/",
             {"name": "Bright Academy", "domain": "bright.edu"},
             format="json",
+            HTTP_ORIGIN="http://localhost:5174",
         )
         self.assertEqual(response.status_code, 201)
         body = response.json()

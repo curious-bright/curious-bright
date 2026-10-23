@@ -10,6 +10,26 @@ urlpatterns = [
         name="org_students_template",
     ),
     path("organizations/join-by-domain/", views.JoinByDomainView.as_view(), name="org_join_domain"),
+    path(
+        "organizations/search/",
+        views.OrganizationSearchView.as_view(),
+        name="org_search",
+    ),
+    path(
+        "organizations/verification/email/<uuid:token>/",
+        views.OrganizationVerificationEmailConfirmView.as_view(),
+        name="org_verification_email_confirm",
+    ),
+    path(
+        "organizations/join-requests/me/",
+        views.MyOrganizationJoinRequestsView.as_view(),
+        name="org_my_join_requests",
+    ),
+    path(
+        "organizations/join-requests/<int:pk>/withdraw/",
+        views.OrganizationJoinRequestWithdrawView.as_view(),
+        name="org_join_request_withdraw",
+    ),
     path("organizations/invitations/me/", views.MyInvitationsView.as_view(), name="org_my_invitations"),
     path(
         "organizations/invitations/<uuid:token>/accept/",
@@ -17,6 +37,31 @@ urlpatterns = [
         name="org_accept_invitation",
     ),
     path("organizations/<slug:slug>/", views.OrganizationDetailView.as_view(), name="org_detail"),
+    path(
+        "organizations/<slug:slug>/verification/",
+        views.OrganizationVerificationView.as_view(),
+        name="org_verification",
+    ),
+    path(
+        "organizations/<slug:slug>/verification/resend/",
+        views.OrganizationVerificationResendView.as_view(),
+        name="org_verification_resend",
+    ),
+    path(
+        "organizations/<slug:slug>/verification/document/",
+        views.OrganizationVerificationDocumentView.as_view(),
+        name="org_verification_document",
+    ),
+    path(
+        "organizations/<slug:slug>/join-requests/",
+        views.OrganizationJoinRequestListView.as_view(),
+        name="org_join_requests",
+    ),
+    path(
+        "organizations/<slug:slug>/join-requests/<int:pk>/decision/",
+        views.OrganizationJoinRequestDecisionView.as_view(),
+        name="org_join_request_decision",
+    ),
     path("organizations/<slug:slug>/members/", views.MemberListView.as_view(), name="org_members"),
     path(
         "organizations/<slug:slug>/members/invite/",

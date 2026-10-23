@@ -5,6 +5,9 @@ from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .storage import private_storage
+from .validators import validate_verification_document, verification_document_path
+
 
 class Organization(models.Model):
     class OrgType(models.TextChoices):
@@ -26,6 +29,12 @@ class Organization(models.Model):
         ACTIVE = "active", "Active"
         PAST_DUE = "past_due", "Past due"
         CANCELED = "canceled", "Canceled"
+
+    class VerificationStatus(models.TextChoices):
+        UNVERIFIED = "unverified", "Unverified"
+        PENDING = "pending", "Pending review"
+        VERIFIED = "verified", "Verified"
+        REJECTED = "rejected", "Rejected"
 
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=80, unique=True, blank=True)
@@ -52,6 +61,17 @@ class Organization(models.Model):
     auto_join_domain = models.BooleanField(
         default=False, help_text="Let people with a matching email domain join automatically."
     )
+    allow_join_requests = models.BooleanField(
+        default=True,
+        help_text="Let verified organizations receive join requests from members.",
+    )
+    verification_status = models.CharField(
+        max_length=12,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.UNVERIFIED,
+        db_index=True,
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,6 +96,15 @@ class Organization(models.Model):
         super().save(*args, **kwargs)
 
     @property
+    def is_verified(self):
+        return self.verification_status == self.VerificationStatus.VERIFIED
+
+    @property
+    def can_grant_access(self):
+        """Only verified organizations may create or invite new members."""
+        return self.is_verified
+
+    @property
     def is_enterprise(self):
         return self.plan_tier == self.Plan.ENTERPRISE
 
@@ -92,6 +121,140 @@ class Organization(models.Model):
             accepted_at__isnull=True, revoked_at__isnull=True, expires_at__gt=timezone.now()
         ).count()
         return active + pending
+
+
+class OrganizationVerification(models.Model):
+    """The current verification submission for an organization.
+
+    Rejected organizations can edit and resubmit this record. Every submission
+    and decision is also written to ``OrganizationVerificationEvent`` so the
+    review history survives resubmissions.
+    """
+
+    organization = models.OneToOneField(
+        Organization, on_delete=models.CASCADE, related_name="verification"
+    )
+    legal_name = models.CharField(max_length=200)
+    org_type = models.CharField(max_length=30, choices=Organization.OrgType.choices)
+    country = models.CharField(max_length=100)
+    address = models.TextField()
+    website = models.URLField(max_length=300)
+    official_email = models.EmailField()
+    official_email_verified_at = models.DateTimeField(null=True, blank=True)
+    official_email_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    contact_name = models.CharField(max_length=120)
+    contact_role = models.CharField(max_length=120)
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=40, blank=True)
+    registration_number = models.CharField(max_length=120, blank=True)
+    registration_document = models.FileField(
+        upload_to=verification_document_path,
+        storage=private_storage,
+        validators=[validate_verification_document],
+        null=True,
+        blank=True,
+    )
+    is_government_funded = models.BooleanField(default=False)
+    head_of_institution = models.CharField(
+        max_length=160,
+        blank=True,
+        help_text="Vice-Chancellor, Dean, Rector or equivalent for public institutions.",
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_verifications_reviewed",
+    )
+    rejection_reason = models.TextField(blank=True)
+    attempt = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"Verification for {self.organization.slug}"
+
+    @property
+    def official_email_verified(self):
+        return self.official_email_verified_at is not None
+
+
+class OrganizationVerificationEvent(models.Model):
+    class Action(models.TextChoices):
+        SUBMITTED = "submitted", "Submitted"
+        EMAIL_CONFIRMED = "email_confirmed", "Official email confirmed"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        RESUBMITTED = "resubmitted", "Resubmitted"
+        EMAIL_RESENT = "email_resent", "Confirmation email resent"
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="verification_events"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_verification_events",
+    )
+    action = models.CharField(max_length=30, choices=Action.choices)
+    note = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.action} @ {self.organization.slug}"
+
+
+class OrganizationJoinRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="join_requests"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="organization_join_requests"
+    )
+    message = models.TextField(max_length=1000, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_join_requests_reviewed",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "user"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_org_join_request",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.organization.slug} ({self.status})"
 
 
 class OrganizationMembership(models.Model):

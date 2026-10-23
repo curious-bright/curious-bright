@@ -308,6 +308,10 @@ CORS_ALLOWED_ORIGINS = env_list(
 )
 CORS_ALLOW_CREDENTIALS = True
 
+# Media that must never be served from the public MEDIA_URL tree (verification
+# documents). Authenticated, permission-checked download views read from here.
+PRIVATE_MEDIA_ROOT = env("PRIVATE_MEDIA_ROOT", str(BASE_DIR / "private_media"))
+
 # Admin bootstrap (never hardcode credentials in the repo).
 ADMIN_USERNAME = env("ADMIN_USERNAME")
 ADMIN_EMAIL = env("ADMIN_EMAIL")
@@ -330,8 +334,35 @@ EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng")
 ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
 APP_FRONTEND_URL = env("APP_FRONTEND_URL", "https://app.curiousbright.com.ng")
+LANDING_FRONTEND_URL = env("LANDING_FRONTEND_URL", "https://curiousbright.com.ng")
 BILLING_CALLBACK_URL = env(
-    "BILLING_CALLBACK_URL", f"{APP_FRONTEND_URL.rstrip('/')}/payment/verify"
+    "BILLING_CALLBACK_URL", f"{ORG_FRONTEND_URL.rstrip('/')}/billing/verify"
+)
+
+# The browser clients live on several origins. Keep the CORS allow-list usable
+# without making every deployment repeat the marketing/portal hosts.
+for _public_origin in (
+    APP_FRONTEND_URL,
+    ORG_FRONTEND_URL,
+    LANDING_FRONTEND_URL,
+    "https://www.curiousbright.com.ng",
+    "https://www.app.curiousbright.com.ng",
+    "https://www.org.curiousbright.com.ng",
+):
+    if _public_origin and _public_origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_public_origin)
+
+# Channels uses its own origin allow-list. It includes every browser client so
+# notifications, room chat and direct messages work from the portal too.
+WS_ALLOWED_ORIGINS = env_list("WS_ALLOWED_ORIGINS", ",".join(CORS_ALLOWED_ORIGINS))
+
+# Organization creation is an institutional-portal action. Removing the member
+# app UI is the first guard; this origin check stops the old endpoint being used
+# accidentally from the learning app. The org portal sends an explicit header as
+# well so static hosts with unusual Origin behaviour still work.
+ORG_REGISTRATION_ALLOWED_ORIGINS = env_list(
+    "ORG_REGISTRATION_ALLOWED_ORIGINS",
+    f"{ORG_FRONTEND_URL},http://localhost:5174,http://127.0.0.1:5174",
 )
 
 # --- Payments (Paystack) ---
