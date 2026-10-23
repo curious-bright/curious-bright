@@ -1,8 +1,8 @@
-from django.conf import settings
 from rest_framework import serializers
 
 from apps.accounts.serializers import PublicUserSerializer
 
+from .livekit import livekit_config
 from .models import Room, RoomMember, RoomMessage
 
 
@@ -56,11 +56,7 @@ class RoomSerializer(serializers.ModelSerializer):
         return False
 
     def get_livekit_enabled(self, obj):
-        return bool(
-            getattr(settings, "LIVEKIT_URL", "")
-            and getattr(settings, "LIVEKIT_API_KEY", "")
-            and getattr(settings, "LIVEKIT_API_SECRET", "")
-        )
+        return livekit_config()["configured"]
 
     def get_whiteboard_strokes(self, obj):
         return len(((obj.whiteboard_data or {}).get("strokes")) or [])

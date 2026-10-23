@@ -1,4 +1,5 @@
 from datetime import timedelta
+import json
 
 import jwt
 from django.conf import settings
@@ -17,6 +18,7 @@ from apps.core.audit import audit_content, changed_fields
 from apps.core.models import ContentAuditLog
 from apps.realtime.broadcast import publish
 
+from .livekit import livekit_config
 from .models import Room, RoomMember, RoomMessage
 from .serializers import (
     RoomMemberSerializer,
@@ -239,11 +241,28 @@ class RoomMessagesView(generics.ListCreateAPIView):
         return super().handle_exception(exc)
 
 
+class LiveKitConfigView(APIView):
+    """Public, secret-free LiveKit availability for the global alert."""
+
+    permission_classes = []
+
+    def get(self, request):
+        config = livekit_config()
+        return Response(
+            {
+                "configured": config["configured"],
+                "url": config["url"],
+                "missing": config["missing"],
+            }
+        )
+
+
 class LiveKitTokenView(APIView):
     """Mint a short-lived LiveKit access token for a room member.
 
     The browser only receives the token and public ws URL; ``LIVEKIT_API_SECRET``
-    stays on the server.
+    stays on the server. LiveKit expects ``metadata`` to be a JSON-encoded
+    string, not a JSON object.
     """
 
     permission_classes = [IsAuthenticated]
@@ -255,32 +274,46 @@ class LiveKitTokenView(APIView):
                 {"code": "forbidden", "message": "Join the room before starting a call."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        url = getattr(settings, "LIVEKIT_URL", "")
-        api_key = getattr(settings, "LIVEKIT_API_KEY", "")
-        api_secret = getattr(settings, "LIVEKIT_API_SECRET", "")
-        if not (url and api_key and api_secret):
+        config = livekit_config()
+        if not config["configured"]:
             return Response(
                 {
                     "code": "livekit_not_configured",
                     "message": "Live video is not configured on this deployment yet.",
+                    "missing": config["missing"],
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         profile = getattr(request.user, "profile", None)
+        avatar = ""
+        if profile is not None:
+            avatar = profile.avatar or ""
+            if not avatar and profile.avatar_file:
+                try:
+                    avatar = profile.avatar_file.url
+                except ValueError:
+                    avatar = ""
+        if avatar and avatar.startswith("/"):
+            avatar = request.build_absolute_uri(avatar)
+
         now = int(timezone.now().timestamp())
         ttl = int(getattr(settings, "LIVEKIT_TOKEN_TTL_SECONDS", 7200))
+        metadata = json.dumps(
+            {
+                "userId": request.user.pk,
+                "username": request.user.username,
+                "avatar": avatar,
+            },
+            separators=(",", ":"),
+        )
         claims = {
-            "iss": api_key,
+            "iss": getattr(settings, "LIVEKIT_API_KEY", ""),
             "sub": f"user-{request.user.pk}",
             "name": request.user.username,
             "nbf": now - 5,
             "exp": now + ttl,
-            "metadata": {
-                "userId": request.user.pk,
-                "username": request.user.username,
-                "avatar": getattr(profile, "avatar", "") or "",
-            },
+            "metadata": metadata,
             "video": {
                 "room": f"room-{room.pk}",
                 "roomJoin": True,
@@ -289,14 +322,19 @@ class LiveKitTokenView(APIView):
                 "canPublishData": True,
             },
         }
-        token = jwt.encode(claims, api_secret, algorithm="HS256")
+        token = jwt.encode(
+            claims,
+            getattr(settings, "LIVEKIT_API_SECRET", ""),
+            algorithm="HS256",
+        )
         return Response(
             {
                 "token": token,
-                "url": url,
+                "url": config["url"],
                 "room": f"room-{room.pk}",
                 "identity": f"user-{request.user.pk}",
                 "expires_in": ttl,
+                "metadata": json.loads(metadata),
             }
         )
 

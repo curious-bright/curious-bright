@@ -1,3 +1,5 @@
+import json
+
 import jwt
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -179,3 +181,38 @@ class RoomAPITests(TestCase):
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(self.client.delete(f"/api/rooms/{self.room.pk}/join/").status_code, 200)
+
+    def test_livekit_config_endpoint_reports_missing_without_leaking_secrets(self):
+        with override_settings(
+            LIVEKIT_URL="",
+            LIVEKIT_API_KEY="",
+            LIVEKIT_API_SECRET="",
+        ):
+            response = self.client.get("/api/livekit/config/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["configured"])
+        self.assertEqual(body["url"], "")
+        self.assertIn("LIVEKIT_URL", body["missing"])
+        self.assertNotIn("test-secret", response.content.decode())
+
+    def test_livekit_metadata_is_json_string_and_https_url_is_normalized(self):
+        self.client.force_authenticate(user=self.member)
+        with override_settings(
+            LIVEKIT_URL="https://livekit.example/",
+            LIVEKIT_API_KEY="test-key",
+            LIVEKIT_API_SECRET="test-secret",
+            LIVEKIT_TOKEN_TTL_SECONDS=600,
+        ):
+            response = self.client.post(f"/api/rooms/{self.room.pk}/livekit-token/")
+            config = self.client.get("/api/livekit/config/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["url"], "wss://livekit.example")
+        claims = jwt.decode(body["token"], "test-secret", algorithms=["HS256"])
+        self.assertIsInstance(claims["metadata"], str)
+        metadata = json.loads(claims["metadata"])
+        self.assertEqual(metadata["username"], "member")
+        self.assertEqual(metadata["userId"], self.member.pk)
+        self.assertTrue(config.json()["configured"])
+        self.assertEqual(config.json()["url"], "wss://livekit.example")
