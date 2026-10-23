@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+from corsheaders.defaults import default_headers
 from django.urls import reverse_lazy
 from dotenv import load_dotenv
 
@@ -307,6 +308,10 @@ CORS_ALLOWED_ORIGINS = env_list(
     "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
 )
 CORS_ALLOW_CREDENTIALS = True
+# The institutional portal tags every request with X-Client-App so the API can
+# restrict organization creation to that client. Custom headers must be listed
+# explicitly or the browser's CORS preflight blocks the whole request.
+CORS_ALLOW_HEADERS = (*default_headers, "x-client-app")
 
 # Media that must never be served from the public MEDIA_URL tree (verification
 # documents). Authenticated, permission-checked download views read from here.

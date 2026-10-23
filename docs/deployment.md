@@ -41,6 +41,9 @@ private messaging. A hidden button is never the security boundary.
 - SMTP for invitations, verification, join-request and billing emails.
 - A reverse proxy/load balancer that forwards WebSocket upgrades to the ASGI
   server.
+- Uvicorn with WebSocket support (`uvicorn[standard]` in `requirements.txt`).
+  Bare `uvicorn` logs "No supported WebSocket library detected" and returns
+  404 for every `/ws/` handshake.
 
 ### 2.2 Core environment
 
