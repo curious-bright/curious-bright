@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { Users, ArrowRight, Sparkles, Menu, X, BookOpen, Award } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Users, ArrowRight, Sparkles, Menu, X, BookOpen, Award, CreditCard } from 'lucide-react';
 import websiteLogo from '../assets/website-logo.svg';
 
 export const Navbar: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const navItems = [
-    { href: '#features', icon: Users, label: 'Work Together' },
-    { href: '#sandbox', icon: null, label: 'Live Playground' },
-    { href: '#institutions', icon: BookOpen, label: 'For Schools & Labs' },
+    { href: '/#features', icon: Users, label: 'Work Together' },
+    { href: '/#sandbox', icon: null, label: 'Live Playground' },
+    { href: '/#institutions', icon: BookOpen, label: 'For Schools & Labs' },
+    { href: '/pricing', icon: CreditCard, label: 'Pricing' },
     { href: 'https://app.curiousbright.com.ng/register', icon: Award, label: 'Earn Badges' },
-    { href: '#sponsor', icon: null, label: '♥ Sponsor' },
+    { href: '/#sponsor', icon: null, label: '♥ Sponsor' },
   ];
 
   return (
@@ -20,9 +22,9 @@ export const Navbar: React.FC = () => {
 
           {/* Brand Logo & Name */}
           <div className="flex items-center gap-3 min-w-0">
-            <a href="/" className="flex items-center gap-2.5 group hover:opacity-90 transition-opacity">
+            <Link to="/" className="flex items-center gap-2.5 group hover:opacity-90 transition-opacity">
               <img src={websiteLogo} alt="Curious Bright" style={{ height: 32, width: 'auto' }} className="sm:h-9" />
-            </a>
+            </Link>
             <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm text-xs font-mono font-medium border border-[var(--color-line)] bg-white text-[var(--color-faded-ink)]">
               <Sparkles className="w-3 h-3 text-[var(--color-coral)]" />
               LEARNING COMMUNITY + RESEARCH
@@ -33,15 +35,21 @@ export const Navbar: React.FC = () => {
           <nav className="hidden lg:flex items-center gap-8">
             {navItems.map((item) => {
               const Icon = item.icon;
-              return (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className={`text-sm font-medium text-[var(--color-faded-ink)] hover:text-[var(--color-ink)] transition-colors flex items-center gap-1.5 ${item.label.includes('Sponsor') ? 'font-semibold text-[var(--color-coral)] hover:text-[var(--color-ink)]' : ''}`}
-                >
+              const className = `text-sm font-medium text-[var(--color-faded-ink)] hover:text-[var(--color-ink)] transition-colors flex items-center gap-1.5 ${item.label.includes('Sponsor') ? 'font-semibold text-[var(--color-coral)] hover:text-[var(--color-ink)]' : ''}`;
+              const content = (
+                <>
                   {Icon ? <Icon className="w-4 h-4 text-[var(--color-coral)]" /> : null}
                   {item.label}
+                </>
+              );
+              return item.href.startsWith('http') ? (
+                <a key={item.label} href={item.href} className={className}>
+                  {content}
                 </a>
+              ) : (
+                <Link key={item.label} to={item.href} className={className}>
+                  {content}
+                </Link>
               );
             })}
           </nav>
@@ -79,16 +87,31 @@ export const Navbar: React.FC = () => {
           <nav className="lg:hidden py-4 border-t border-[var(--color-line)] flex flex-col gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              return (
+              const content = (
+                <>
+                  {Icon ? <Icon className="w-4 h-4 text-[var(--color-coral)]" /> : <span className="w-4" />}
+                  {item.label}
+                </>
+              );
+              const className = 'flex items-center gap-2.5 px-2 py-2.5 rounded-sm text-sm font-medium text-[var(--color-ink)] hover:bg-white transition-colors';
+              return item.href.startsWith('http') ? (
                 <a
                   key={item.label}
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-2 py-2.5 rounded-sm text-sm font-medium text-[var(--color-ink)] hover:bg-white transition-colors"
+                  className={className}
                 >
-                  {Icon ? <Icon className="w-4 h-4 text-[var(--color-coral)]" /> : <span className="w-4" />}
-                  {item.label}
+                  {content}
                 </a>
+              ) : (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={className}
+                >
+                  {content}
+                </Link>
               );
             })}
             <a

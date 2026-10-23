@@ -51,9 +51,10 @@ export const Footer: React.FC = () => {
               Institutions
             </h4>
             <ul className="space-y-2 text-xs">
-              <li><a href="https://org.curiousbright.com.ng" className="hover:text-[var(--color-ink)] transition-colors">Apply for Institution</a></li>
+              <li><Link to="/pricing" className="hover:text-[var(--color-ink)] transition-colors">Plans &amp; Pricing</Link></li>
+              <li><a href="https://org.curiousbright.com.ng" className="hover:text-[var(--color-ink)] transition-colors">Institutional Portal</a></li>
               <li><a href="https://app.curiousbright.com.ng/moderate" className="hover:text-[var(--color-ink)] transition-colors">Become a Moderator</a></li>
-              <li><a href="https://org.curiousbright.com.ng/#institutions" className="hover:text-[var(--color-ink)] transition-colors">School Access Grants</a></li>
+              <li><a href="https://app.curiousbright.com.ng/join-organization" className="hover:text-[var(--color-ink)] transition-colors">Join an Organization</a></li>
             </ul>
           </div>
 
@@ -106,6 +107,8 @@ export const Footer: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link to="/pricing" className="hover:text-[var(--color-ink)] transition-colors">Pricing</Link>
+            <span>•</span>
             <Link to="/privacy" className="hover:text-[var(--color-ink)] transition-colors">Privacy</Link>
             <span>•</span>
             <Link to="/terms" className="hover:text-[var(--color-ink)] transition-colors">Terms</Link>

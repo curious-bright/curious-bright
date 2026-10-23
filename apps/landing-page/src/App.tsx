@@ -8,6 +8,8 @@ import { SponsorSection } from './components/SponsorSection';
 import { Footer } from './components/Footer';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { TermsOfUse } from './pages/TermsOfUse';
+import { Pricing } from './pages/Pricing';
+import AnalyticsTracker from './components/AnalyticsTracker';
 
 function HomePage() {
   return (
@@ -28,8 +30,10 @@ function HomePage() {
 function App() {
   return (
     <BrowserRouter>
+      <AnalyticsTracker />
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfUse />} />
         <Route path="*" element={<Navigate to="/" replace />} />
