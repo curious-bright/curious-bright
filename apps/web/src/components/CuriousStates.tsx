@@ -69,10 +69,10 @@ export function CuriousError({
   return (
     <div className="alert alert-error flex flex-col items-start gap-2" style={{ maxWidth: '560px', margin: '2rem auto' }}>
       <div className="font-semibold text-sm flex items-center gap-1.5" style={{ fontSize: '1rem' }}>
-        <i className="bx bx-error-circle" style={{ fontSize: '1.25rem', color: '#A82810' }}></i>
+        <i className="bx bx-error-circle" style={{ fontSize: '1.25rem', color: 'var(--danger)' }}></i>
         {title}
       </div>
-      <p style={{ fontSize: '0.875rem', color: '#851E0A' }}>{message}</p>
+      <p style={{ fontSize: '0.875rem', color: 'var(--danger)' }}>{message}</p>
       {onRetry && (
         <button
           className="btn btn-secondary mt-2"

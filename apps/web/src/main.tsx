@@ -1,8 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
+import { initAnalytics } from './lib/analytics';
 import './assets/fonts.css';
 import './index.css';
+
+initAnalytics();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

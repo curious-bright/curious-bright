@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../state/AuthContext';
 import { useFeed } from '../state/FeedContext';
+import { useMessaging } from '../state/MessagingContext';
 import type { FeedPost } from '../state/FeedContext';
 import PostCard from '../components/PostCard';
 import { CuriousLoading, CuriousEmpty } from '../components/CuriousStates';
@@ -13,6 +14,7 @@ interface ProfileData {
   email: string;
   bio: string;
   avatar: string;
+  avatar_url?: string;
   subject_expertise: string;
   post_count: number;
   followers_count: number;
@@ -33,11 +35,14 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>();
+  const navigate = useNavigate();
   const { user, isAuthenticated, updateProfile } = useAuth();
+  const { startConversation } = useMessaging();
   const { toggleFollow, followStatus, loadFeed } = useFeed();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [startingMessage, setStartingMessage] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState('');
   const [expertise, setExpertise] = useState('');
@@ -98,14 +103,14 @@ export default function Profile() {
               height: 64,
               borderRadius: '4px 0 4px 4px',
               background: 'var(--color-teal)',
-              color: '#fff',
+              color: '#14141A',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
               fontSize: '1.5rem',
               flexShrink: 0,
-              backgroundImage: profile.avatar ? `url(${profile.avatar})` : undefined,
+              backgroundImage: (profile.avatar_url || profile.avatar) ? `url(${profile.avatar_url || profile.avatar})` : undefined,
               backgroundSize: 'cover',
             }}
           >
@@ -123,17 +128,33 @@ export default function Profile() {
             </p>
           </div>
           {isAuthenticated && !isMe && (
-            <button
-              className={`btn ${following ? 'btn-secondary' : 'btn-primary'}`}
-              style={{ padding: '0.45rem 1.2rem' }}
-              onClick={async () => {
-                const nowFollowing = await toggleFollow(profile.username, following);
-                setFollowSeeded(nowFollowing);
-                if (nowFollowing) await loadFeed('following', 1);
-              }}
-            >
-              {following ? 'Following' : 'Follow'}
-            </button>
+            <div className="profile-header-actions">
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '0.45rem 1.2rem' }}
+                disabled={startingMessage}
+                onClick={async () => {
+                  setStartingMessage(true);
+                  const conversationId = await startConversation(profile.username);
+                  setStartingMessage(false);
+                  if (conversationId) navigate(`/messages/${conversationId}`);
+                }}
+              >
+                <i className="bx bx-message-rounded-dots"></i>{' '}
+                {startingMessage ? 'Opening…' : 'Message'}
+              </button>
+              <button
+                className={`btn ${following ? 'btn-secondary' : 'btn-primary'}`}
+                style={{ padding: '0.45rem 1.2rem' }}
+                onClick={async () => {
+                  const nowFollowing = await toggleFollow(profile.username, following);
+                  setFollowSeeded(nowFollowing);
+                  if (nowFollowing) await loadFeed('following', 1);
+                }}
+              >
+                {following ? 'Following' : 'Follow'}
+              </button>
+            </div>
           )}
           {isMe && !editing && (
             <button className="btn btn-secondary" style={{ padding: '0.45rem 1.2rem' }} onClick={startEdit}>

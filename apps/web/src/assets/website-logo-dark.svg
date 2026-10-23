@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160">
+  <g transform="translate(20,10)">
+    <circle cx="60" cy="60" r="52" fill="none" stroke="#F2EFE5" stroke-width="5" opacity="0.5"/>
+    <circle cx="60" cy="14" r="9" fill="#F2EFE5"/>
+    <circle cx="105" cy="86" r="9" fill="#F2EFE5"/>
+    <circle cx="15" cy="86" r="9" fill="#F2EFE5"/>
+    <path d="M60,38 Q71,58 92,68 Q71,78 60,98 Q49,78 28,68 Q49,58 60,38 Z" fill="#F2860A"/>
+  </g>
+  <text x="168" y="98" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700"
+        font-size="56" fill="#F2EFE5" letter-spacing="-1">curious<tspan fill="#F2860A">bright</tspan></text>
+</svg>

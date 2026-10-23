@@ -2,23 +2,42 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiDownload, apiVoid, clearTokens } from '../lib/api';
 import { useAuth } from '../state/AuthContext';
+import { useTheme } from '../state/ThemeContext';
 import { CuriousLoading } from '../components/CuriousStates';
 import { HighlighterText } from '../components/HighlighterText';
+
+const THEME_OPTIONS = [
+  { value: 'system', label: 'System', icon: 'bx-laptop', hint: 'Follow your device automatically.' },
+  { value: 'light', label: 'Light', icon: 'bx-sun', hint: 'The original paper-and-ink palette.' },
+  { value: 'dark', label: 'Dark', icon: 'bx-moon', hint: 'Low-light friendly, WCAG AA contrast.' },
+] as const;
+
+const PRIVACY_OPTIONS = [
+  { value: 'anyone', label: 'Anyone', hint: 'Any signed-in member can start a conversation with you.' },
+  { value: 'follows', label: 'People you follow', hint: 'Only members you follow can start a new conversation.' },
+  { value: 'nobody', label: 'Nobody', hint: 'No new conversations. Existing conversations can continue.' },
+] as const;
+
+type MessagePrivacy = (typeof PRIVACY_OPTIONS)[number]['value'];
 
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading, isAuthenticated, updateProfile, changePassword, logout, refreshMe } = useAuth();
+  const { mode, setMode } = useTheme();
 
   const [bio, setBio] = useState('');
   const [expertise, setExpertise] = useState('');
   const [country, setCountry] = useState('');
   const [school, setSchool] = useState('');
+  const [messagePrivacy, setMessagePrivacy] = useState<MessagePrivacy>('anyone');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [privacySaved, setPrivacySaved] = useState(false);
   const avatarInput = useRef<HTMLInputElement>(null);
 
   const [oldPassword, setOldPassword] = useState('');
@@ -40,6 +59,7 @@ export default function Settings() {
     setExpertise(user.profile.subject_expertise || '');
     setCountry(user.profile.country || '');
     setSchool(user.profile.school || '');
+    setMessagePrivacy(user.profile.message_privacy || 'anyone');
   }, [user?.id]);
 
   useEffect(() => {
@@ -93,8 +113,17 @@ export default function Settings() {
     }
   };
 
-  const submitPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const savePrivacy = async () => {
+    setSavingPrivacy(true);
+    const ok = await updateProfile({ message_privacy: messagePrivacy });
+    setSavingPrivacy(false);
+    if (ok) {
+      setPrivacySaved(true);
+      window.setTimeout(() => setPrivacySaved(false), 4000);
+    }
+  };
+
+  const submitPassword = async (e: React.FormEvent) => {    e.preventDefault();
     setPasswordError('');
     if (newPassword !== confirmPassword) {
       setPasswordError('The new passwords do not match.');
@@ -131,7 +160,7 @@ export default function Settings() {
     }
   };
 
-  const avatar = avatarPreview || user.profile.avatar;
+  const avatar = avatarPreview || user.profile.avatar_url || user.profile.avatar;
 
   return (
     <div className="settings-page">
@@ -152,6 +181,8 @@ export default function Settings() {
 
       <nav className="settings-nav" aria-label="Settings sections">
         <a href="#profile">Profile</a>
+        <a href="#appearance">Appearance</a>
+        <a href="#messaging">Messaging</a>
         <a href="#security">Security</a>
         <a href="#data">Your data</a>
         <a href="#danger">Delete account</a>
@@ -261,6 +292,71 @@ export default function Settings() {
           </div>
           {profileError && <p className="field-error">{profileError}</p>}
         </form>
+      </section>
+
+      <section id="appearance" className="comment-corner-card settings-card">
+        <div className="settings-card-head">
+          <div>
+            <h3>Appearance</h3>
+            <p className="text-sm text-muted">
+              Choose how Curious Bright looks. System follows your device setting automatically.
+            </p>
+          </div>
+        </div>
+        <div className="theme-options" role="radiogroup" aria-label="Color theme">
+          {THEME_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option.value}
+              role="radio"
+              aria-checked={mode === option.value}
+              className={`theme-option ${mode === option.value ? 'selected' : ''}`}
+              onClick={() => setMode(option.value)}
+            >
+              <i className={`bx ${option.icon}`}></i>
+              <strong>{option.label}</strong>
+              <span>{option.hint}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section id="messaging" className="comment-corner-card settings-card">
+        <div className="settings-card-head">
+          <div>
+            <h3>Private messages</h3>
+            <p className="text-sm text-muted">
+              Control who can start a new one-to-one conversation with you. Existing conversations
+              stay open unless someone blocks the other person.
+            </p>
+          </div>
+        </div>
+        <div className="privacy-options" role="radiogroup" aria-label="Who can message you">
+          {PRIVACY_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className={`privacy-option ${messagePrivacy === option.value ? 'selected' : ''}`}
+            >
+              <input
+                type="radio"
+                name="message-privacy"
+                value={option.value}
+                checked={messagePrivacy === option.value}
+                onChange={() => setMessagePrivacy(option.value)}
+              />
+              <span>
+                <strong>{option.label}</strong>
+                <small>{option.hint}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="settings-actions">
+          <button type="button" className="btn btn-primary" onClick={() => void savePrivacy()} disabled={savingPrivacy}>
+            {savingPrivacy ? 'Saving…' : 'Save messaging preference'}
+          </button>
+          {privacySaved && <span className="save-note"><i className="bx bx-check-circle"></i> Preference saved</span>}
+        </div>
       </section>
 
       <section id="security" ref={passwordSection} className="comment-corner-card settings-card">

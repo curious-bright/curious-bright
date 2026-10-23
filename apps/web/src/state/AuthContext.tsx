@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, apiVoid, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../lib/api';
 
 export interface BadgeInfo {
@@ -27,6 +27,7 @@ export interface Me {
     following_count: number;
     badge_count: number;
     badges: BadgeInfo[];
+    message_privacy: 'anyone' | 'follows' | 'nobody';
     created_at: string;
   };
   is_moderator: boolean;
@@ -40,6 +41,7 @@ export type ProfilePatch = Partial<{
   subject_expertise: string;
   country: string;
   school: string;
+  message_privacy: 'anyone' | 'follows' | 'nobody';
 }>;
 
 interface AuthContextValue {
@@ -49,7 +51,7 @@ interface AuthContextValue {
   login: (identifier: string, password: string) => Promise<Me | null>;
   register: (username: string, email: string, password: string) => Promise<Me | null>;
   logout: () => Promise<void>;
-  refreshMe: () => Promise<void>;
+  refreshMe: (force?: boolean) => Promise<void>;
   updateProfile: (patch: ProfilePatch, avatarFile?: File | null) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
 }
@@ -59,13 +61,24 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Me | null>(null);
   const [loading, setLoading] = useState<boolean>(!!getAccessToken());
+  const lastRefreshRef = useRef(0);
 
-  const refreshMe = useCallback(async () => {
+  const broadcastAuthChange = useCallback(() => {
+    try {
+      localStorage.setItem('cb.auth', String(Date.now()));
+    } catch {
+      // storage can be unavailable in private browsing; the local state is fine
+    }
+  }, []);
+
+  const refreshMe = useCallback(async (force = false) => {
     if (!getAccessToken()) {
       setUser(null);
       setLoading(false);
       return;
     }
+    if (!force && Date.now() - lastRefreshRef.current < 15000) return;
+    lastRefreshRef.current = Date.now();
     const data = await apiFetch<Me>('/auth/me/');
     if (data) {
       setUser(data);
@@ -77,7 +90,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshMe();
+    void refreshMe(true);
+  }, [refreshMe]);
+
+  // Profile freshness across tabs, focus changes and a restored session. This
+  // keeps the sidebar, profile page and permissions in sync without polling.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') void refreshMe();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshMe();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'cb.auth') void refreshMe(true);
+      if (event.key === 'lb_access' && !event.newValue) {
+        setUser(null);
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('storage', onStorage);
+    };
   }, [refreshMe]);
 
   const login = useCallback(
@@ -97,9 +135,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(me);
       setLoading(false);
       localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
+      broadcastAuthChange();
       return me;
     },
-    [],
+    [broadcastAuthChange],
   );
 
   const register = useCallback(
@@ -123,7 +162,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearTokens();
     localStorage.removeItem('user');
     setUser(null);
-  }, []);
+    broadcastAuthChange();
+  }, [broadcastAuthChange]);
 
   const updateProfile = useCallback(
     async (patch: ProfilePatch, avatarFile?: File | null): Promise<boolean> => {
@@ -141,9 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const updated = await apiFetch<Me>('/auth/me/', { method: 'PATCH', body });
       if (!updated) return false;
       setUser(updated);
+      localStorage.setItem('user', JSON.stringify({ id: updated.id, name: updated.username, email: updated.email }));
+      broadcastAuthChange();
       return true;
     },
-    [],
+    [broadcastAuthChange],
   );
 
   const changePassword = useCallback(

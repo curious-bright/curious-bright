@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import websiteLogo from '../assets/website-logo.svg';
+import websiteLogoDark from '../assets/website-logo-dark.svg';
 import { useAuth } from '../state/AuthContext';
 import { useNotifications } from '../state/NotificationContext';
+import { useMessaging } from '../state/MessagingContext';
+import { useTheme } from '../state/ThemeContext';
+
+const ORG_PORTAL_URL = (import.meta.env.VITE_ORG_URL as string | undefined) || 'https://org.curiousbright.com.ng';
 
 export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; closeSidebar?: () => void }) {
   const navigate = useNavigate();
@@ -10,6 +15,8 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
   const [searchQuery, setSearchQuery] = useState('');
   const { user, isAuthenticated, logout } = useAuth();
   const { unreadCount } = useNotifications();
+  const { unreadTotal: messageUnread } = useMessaging();
+  const { resolved: theme } = useTheme();
 
   const handleLogout = async () => {
     await logout();
@@ -25,22 +32,24 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
     }
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) =>
+    location.pathname === path || (path !== '/feed' && location.pathname.startsWith(`${path}/`));
 
   const navLink = (to: string, icon: string, label: string, badge?: number) => (
     <Link
       to={to}
-      className={`btn ${isActive(to) ? 'btn-primary' : 'btn-secondary'}`}
+      className={`btn sidebar-nav-link ${isActive(to) ? 'btn-primary' : 'btn-secondary'}`}
       style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
+      title={label}
     >
       <i className={icon} style={{ fontSize: '1.15rem' }}></i>
-      <span>{label}</span>
+      <span className="sidebar-nav-label">{label}</span>
       {badge ? (
         <span
-          className="badge-tag badge-coral"
+          className="badge-tag badge-coral sidebar-nav-badge"
           style={{ marginLeft: 'auto', fontSize: '0.62rem', padding: '0.05rem 0.4rem' }}
         >
-          {badge}
+          {badge > 9 ? '9+' : badge}
         </span>
       ) : null}
     </Link>
@@ -52,15 +61,16 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
       <div className="sidebar-header" style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1.5px solid var(--color-line)' }}>
         <Link to="/feed" style={{ textDecoration: 'none', display: 'block' }}>
           <img
-            src={websiteLogo}
+            src={theme === 'dark' ? websiteLogoDark : websiteLogo}
             alt="Curious Bright"
             style={{ height: 44, width: 'auto', maxWidth: '100%', display: 'block' }}
           />
+          <span className="sidebar-brand-mark" aria-hidden="true">CB</span>
         </Link>
       </div>
 
       {/* Global Search Bar */}
-      <form onSubmit={handleSearch} style={{ marginBottom: '1.5rem', position: 'relative' }}>
+      <form onSubmit={handleSearch} className="sidebar-search" style={{ marginBottom: '1.5rem', position: 'relative' }}>
         <input
           type="text"
           placeholder="Search knowledge, research..."
@@ -89,29 +99,38 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
 
       {/* Navigation */}
       <nav className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
-        <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginBottom: '0.25rem' }}>
+        <div className="sidebar-section-label" style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginBottom: '0.25rem' }}>
           Community
         </div>
 
         {navLink('/feed', 'bx bx-conversation', 'Feed')}
+        {navLink('/messages', 'bx bx-message-rounded-dots', 'Messages', messageUnread)}
         {navLink('/research', 'bx bx-transfer-alt', 'Research Studio')}
         {navLink('/notifications', 'bx bx-bell', 'Notifications', unreadCount)}
         {isAuthenticated && user ? navLink(`/profile/${user.username}`, 'bx bx-user', 'My Profile') : null}
         {isAuthenticated ? navLink('/settings', 'bx bx-cog', 'Account Settings') : null}
 
-        <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
+        <div className="sidebar-section-label" style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
           Library
         </div>
 
         {navLink('/browse', 'bx bx-book-open', 'Open Library')}
         {navLink('/submit', 'bx bx-upload', 'Share a Paper')}
         {navLink('/community', 'bx bx-video', 'Study Rooms')}
-        {navLink('/apply-institution', 'bx bx-buildings', 'For Institutions')}
-        {navLink('/pricing', 'bx bx-purchase-tag', 'Pricing')}
+        {navLink('/join-organization', 'bx bx-buildings', 'Join an Organization')}
+        <a
+          href={ORG_PORTAL_URL}
+          className="btn btn-secondary sidebar-nav-link"
+          style={{ justifyContent: 'flex-start', padding: '0.6rem 0.85rem' }}
+          title="Institution portal"
+        >
+          <i className="bx bx-log-in-circle" style={{ fontSize: '1.15rem' }}></i>
+          <span className="sidebar-nav-label">Institution Portal</span>
+        </a>
 
         {isAuthenticated && (
           <>
-            <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
+            <div className="sidebar-section-label" style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-faded-ink)', marginTop: '1.25rem', marginBottom: '0.25rem' }}>
               Review Queue
             </div>
             {user?.can_moderate
@@ -123,6 +142,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
 
       {/* User Card */}
       <div
+        className="sidebar-user-card"
         style={{
           marginTop: 'auto',
           padding: '0.85rem',
@@ -143,21 +163,21 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
                   height: 32,
                   borderRadius: '3px 0px 3px 3px',
                   background: 'var(--color-coral)',
-                  color: '#FFFFFF',
+                  color: '#14141A',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 700,
                   fontSize: '0.875rem',
                   flexShrink: 0,
-                  ...(user.profile?.avatar
-                    ? { backgroundImage: `url(${user.profile.avatar})`, backgroundSize: 'cover' }
+                  ...((user.profile?.avatar || user.profile?.avatar_url)
+                    ? { backgroundImage: `url(${user.profile.avatar_url || user.profile.avatar})`, backgroundSize: 'cover' }
                     : {}),
                 }}
               >
-                {!user.profile?.avatar && (user.username?.[0]?.toUpperCase() || 'U')}
+                {!(user.profile?.avatar || user.profile?.avatar_url) && (user.username?.[0]?.toUpperCase() || 'U')}
               </div>
-              <div style={{ overflow: 'hidden' }}>
+              <div className="sidebar-user-copy" style={{ overflow: 'hidden' }}>
                 <div className="font-semibold text-xs text-truncate" style={{ color: 'var(--color-ink)' }}>
                   {user.username}
                 </div>
@@ -168,10 +188,12 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
             </div>
             <button
               onClick={() => void handleLogout()}
-              className="btn btn-secondary"
+              className="btn btn-secondary sidebar-user-actions"
               style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', flexShrink: 0 }}
+              title="Log out"
             >
-              Log out
+              <i className="bx bx-log-out"></i>
+              <span>Log out</span>
             </button>
           </>
         ) : (

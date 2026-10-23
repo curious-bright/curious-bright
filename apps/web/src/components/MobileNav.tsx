@@ -1,11 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../state/AuthContext';
-import { useNotifications } from '../state/NotificationContext';
+import { useMessaging } from '../state/MessagingContext';
 
 export default function MobileNav() {
   const location = useLocation();
   const { user, isAuthenticated } = useAuth();
-  const { unreadCount } = useNotifications();
+  const { unreadTotal } = useMessaging();
 
   if (['/login', '/register', '/mod-login'].includes(location.pathname)) return null;
 
@@ -13,13 +13,13 @@ export default function MobileNav() {
     location.pathname === path || (path !== '/feed' && location.pathname.startsWith(`${path}/`));
 
   const items: { to: string; icon: string; label: string; badge?: number }[] = [
-    { to: '/feed', icon: 'bx-home-alt-2', label: 'Feed' },
-    { to: '/research', icon: 'bx-book-content', label: 'Research' },
-    { to: '/community', icon: 'bx-video', label: 'Rooms' },
-    { to: '/notifications', icon: 'bx-bell', label: 'Alerts', badge: unreadCount },
+    { to: '/feed', icon: 'bx-home-alt-2', label: 'Home' },
+    { to: '/search', icon: 'bx-search', label: 'Search' },
+    { to: '/community', icon: 'bx-video', label: 'Study Rooms' },
+    { to: '/messages', icon: 'bx-message-rounded-dots', label: 'Messages', badge: unreadTotal },
     isAuthenticated && user
-      ? { to: `/profile/${user.username}`, icon: 'bx-user-circle', label: 'Me' }
-      : { to: '/login', icon: 'bx-log-in-circle', label: 'Sign in' },
+      ? { to: `/profile/${user.username}`, icon: 'bx-user-circle', label: 'Profile' }
+      : { to: '/login', icon: 'bx-log-in-circle', label: 'Profile' },
   ];
 
   return (

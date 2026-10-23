@@ -9,6 +9,7 @@ import Whiteboard from '../components/Whiteboard';
 import Modal from '../components/Modal';
 import { UndoNotice } from '../components/UndoToast';
 import { useAuth } from '../state/AuthContext';
+import { useMessaging } from '../state/MessagingContext';
 
 const ROOM_UNDO_MS = 45_000;
 
@@ -46,6 +47,8 @@ export default function Room() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { startConversation } = useMessaging();
+  const [startingMessageId, setStartingMessageId] = useState<number | null>(null);
 
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -551,6 +554,23 @@ export default function Room() {
                             </Link>
                             <span>{member.user.profile?.subject_expertise || 'Co-author'}</span>
                           </div>
+                          {member.user.id !== user?.id && (
+                            <button
+                              type="button"
+                              className="room-member-message"
+                              title={`Message @${member.user.username}`}
+                              aria-label={`Message @${member.user.username}`}
+                              disabled={startingMessageId === member.user.id}
+                              onClick={async () => {
+                                setStartingMessageId(member.user.id);
+                                const conversationId = await startConversation(member.user.username);
+                                setStartingMessageId(null);
+                                if (conversationId) navigate(`/messages/${conversationId}`);
+                              }}
+                            >
+                              <i className="bx bx-message-rounded-dots"></i>
+                            </button>
+                          )}
                           <span className={`room-online-dot ${onlineIds.has(member.user.id) ? 'online' : ''}`} title={onlineIds.has(member.user.id) ? 'Online' : 'Member'} />
                         </div>
                       ))}

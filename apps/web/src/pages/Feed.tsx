@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch, resultsOf } from '../lib/api';
 import { useFeed, type PostVisibility } from '../state/FeedContext';
 import { useAuth } from '../state/AuthContext';
@@ -27,7 +27,8 @@ function Composer() {
   const { addPost, loadFeed, tab } = useFeed();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [open, setOpen] = useState(() => searchParams.get('compose') === '1');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [subject, setSubject] = useState('math');
@@ -37,6 +38,10 @@ function Composer() {
   const [roomId, setRoomId] = useState<number | ''>('');
   const [rooms, setRooms] = useState<RoomOption[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('compose') === '1' && isAuthenticated) setOpen(true);
+  }, [searchParams, isAuthenticated]);
 
   useEffect(() => {
     if (!open || rooms !== null || !isAuthenticated) return;
@@ -70,6 +75,11 @@ function Composer() {
     setRoomId('');
     setVisibility('public');
     setOpen(false);
+    if (searchParams.get('compose') === '1') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('compose');
+      setSearchParams(next, { replace: true });
+    }
   };
 
   const submit = async () => {

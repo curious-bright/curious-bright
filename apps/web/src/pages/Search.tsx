@@ -182,7 +182,7 @@ export default function Search() {
                             height: 36,
                             borderRadius: '3px 0px 3px 3px',
                             background: 'var(--color-coral)',
-                            color: '#FFFFFF',
+                            color: '#14141A',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
