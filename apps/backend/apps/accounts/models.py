@@ -1,5 +1,13 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
+
+
+class UserManager(DjangoUserManager):
+    """Staff/superusers are trusted accounts and never need email verification."""
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("is_email_verified", True)
+        return super().create_superuser(username, email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -8,6 +16,13 @@ class User(AbstractUser):
         default=False,
         help_text="Grants access to the community review queue and reports.",
     )
+    is_email_verified = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Public sign-ups must verify their email before they can sign in.",
+    )
+
+    objects = UserManager()
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]
@@ -66,3 +81,51 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.follower.username} -> {self.followed.username}"
+
+
+class EmailVerificationCode(models.Model):
+    """A short-lived, hashed six-digit registration verification code."""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="email_verification_codes"
+    )
+    email = models.EmailField()
+    code_hash = models.CharField(max_length=128)
+    request_ip_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "consumed_at"]),
+            models.Index(fields=["email", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Verification code for {self.email}"
+
+
+class PasswordResetToken(models.Model):
+    """A single-use password reset token; only the SHA-256 hash is stored."""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="password_reset_tokens"
+    )
+    token_hash = models.CharField(max_length=64, db_index=True)
+    request_ip_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "used_at"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Password reset token for user {self.user_id}"

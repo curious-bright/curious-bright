@@ -1,0 +1,32 @@
+{% extends "emails/base.html" %}
+{% block title %}Your CuriousBright verification code{% endblock %}
+{% block preheader %}Your verification code expires in 10 minutes.{% endblock %}
+{% block content %}
+<p class="cb-ink" style="margin:0 0 14px 0;color:#14141A;font-size:16px;line-height:1.65;">Hi {{ first_name }},</p>
+<p class="cb-ink" style="margin:0 0 22px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  welcome to CuriousBright! Your verification code is:
+</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;">
+  <tr>
+    <td align="center">
+      <div class="cb-code" style="display:inline-block;background-color:#FFF0EB;border:1px solid #FFC7B9;border-radius:12px;padding:16px 22px;color:#C73214;font-family:'Courier New',Courier,monospace;font-size:32px;line-height:1;font-weight:800;letter-spacing:9px;">
+        {{ code }}
+      </div>
+    </td>
+  </tr>
+</table>
+<p class="cb-muted" style="margin:0 0 24px 0;color:#6B685C;font-size:14px;line-height:1.65;">
+  It expires in 10 minutes. If you didn't create an account, you can safely ignore this email.
+</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+  <tr>
+    <td style="border-radius:9px;background-color:#FF5A36;">
+      <a href="{{ verify_url }}" style="display:inline-block;padding:13px 20px;color:#14141A;font-size:14px;font-weight:700;text-decoration:none;">Open the verification screen</a>
+    </td>
+  </tr>
+</table>
+<p class="cb-muted" style="margin:18px 0 0 0;color:#6B685C;font-size:12px;line-height:1.6;">
+  If the button doesn't open, copy this link into your browser:<br>
+  <a href="{{ verify_url }}" style="color:#00A896;text-decoration:underline;word-break:break-all;">{{ verify_url }}</a>
+</p>
+{% endblock %}

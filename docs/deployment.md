@@ -22,7 +22,8 @@ portal ───── REST + WebSockets ────────┘
                                           ├─ Redis (Channels)
                                           ├─ LiveKit (video)
                                           ├─ Paystack (billing)
-                                          └─ SMTP (verification/invites)
+                                          ├─ Resend (verification/reset)
+                                          └─ SMTP (invitations/moderation)
 ```
 
 The backend is authoritative for verification, roles, visibility, billing and
@@ -38,7 +39,9 @@ private messaging. A hidden button is never the security boundary.
 - A persistent volume for `apps/backend/media` (avatars, PDFs, logos) and a
   **separate private persistent volume** for `PRIVATE_MEDIA_ROOT`
   (verification documents).
-- SMTP for invitations, verification, join-request and billing emails.
+- A verified Resend domain for registration-verification, password-reset and
+  password-changed emails. SMTP remains for invitations, join-request and
+  billing mail that still uses Django's `EMAIL_BACKEND`.
 - A reverse proxy/load balancer that forwards WebSocket upgrades to the ASGI
   server.
 - Uvicorn with WebSocket support (`uvicorn[standard]` in `requirements.txt`).
@@ -130,23 +133,65 @@ The webhook verifies the HMAC-SHA512 signature, is idempotent and is the
 authoritative fallback if the browser never returns. USD checkout requires USD
 enabled on the Paystack account.
 
-### 2.5 Email / SMTP
+### 2.5 Email / Resend
+
+Registration verification, password reset and password-changed notices go
+through Resend's HTTPS API. Invitations, join requests and moderation mail still
+use Django's SMTP backend.
 
 ```dotenv
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_...
+RESEND_API_URL=https://api.resend.com/emails
+RESEND_TIMEOUT_SECONDS=10
+RESEND_MAX_ATTEMPTS=3
+RESEND_RETRY_BASE_SECONDS=1
+DEFAULT_FROM_EMAIL=noreply@curiousbright.com.ng
+EMAIL_FROM_NAME=CuriousBright
+SUPPORT_EMAIL=support@curiousbright.com.ng
+EMAIL_REPLY_TO=support@curiousbright.com.ng
+EMAIL_DELIVERY_ASYNC=true
+EMAIL_DELIVERY_WAIT_SECONDS=8
+EMAIL_VERIFICATION_CODE_TTL_SECONDS=600
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=60
+EMAIL_VERIFICATION_MAX_ATTEMPTS=5
+EMAIL_VERIFICATION_EMAIL_HOURLY_LIMIT=5
+EMAIL_VERIFICATION_IP_HOURLY_LIMIT=10
+PASSWORD_RESET_TOKEN_TTL_SECONDS=1800
+PASSWORD_RESET_COOLDOWN_SECONDS=60
+PASSWORD_RESET_EMAIL_HOURLY_LIMIT=5
+PASSWORD_RESET_IP_HOURLY_LIMIT=10
+
+# Existing invitation / moderation mail
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.your-provider.com
 EMAIL_PORT=587
 EMAIL_HOST_USER=...
 EMAIL_HOST_PASSWORD=...
 EMAIL_USE_TLS=true
-DEFAULT_FROM_EMAIL=no-reply@curiousbright.com.ng
 ```
 
-Configure SPF, DKIM and DMARC before launch. Verification, invitation and
-join-request emails are essential; console email is a local development
-fallback only. A `sent: false` response from the resend endpoint means the
-message could not be delivered and should be surfaced to the organization
-admin.
+Do not set `EMAIL_PROVIDER=console` in production. The API key must be a
+backend-only secret; never add it to a member/portal build, Cloudflare Pages
+variables or `VITE_*`.
+
+Resend domain/DNS setup:
+
+1. Add `curiousbright.com.ng` to Resend and create a sending API key.
+2. Add the **exact** MX/TXT/DKIM records Resend shows in Cloudflare as **DNS
+   only** (gray cloud), not proxied.
+3. Keep one SPF record per host; merge includes if one already exists.
+4. Add a DMARC TXT record, starting at `p=none` with a reporting mailbox.
+5. Wait for Resend to report the domain as verified, then send a test and check
+   SPF/DKIM/DMARC in the headers.
+6. Confirm both apps complete registration, verification, resend, change-email,
+   forgot-password and reset flows. Reset links must open the app that requested
+   them (`APP_FRONTEND_URL` or `ORG_FRONTEND_URL`).
+
+Full checklist and local console instructions: [email.md](email.md). A known
+delivery failure from the resend-code endpoint returns HTTP 503
+`email_delivery_failed` and is shown in the app's alert; registration keeps the
+unverified account so the user can retry.
 
 ### 2.6 Private media
 
@@ -233,6 +278,9 @@ Cloudflare/Wrangler. `wrangler.jsonc` serves `apps/institutional-web/dist` with
 
 - `/invitations/<uuid>`
 - `/verification/email/<uuid>`
+- `/verify-email?email=...`
+- `/forgot-password`
+- `/reset-password?uid=...&token=...`
 - `/billing/verify?reference=...`
 
 Build env (Cloudflare project settings or the local `.env.production`):
@@ -274,7 +322,9 @@ delete tombstone, block/unblock, report, and a non-participant 404/4403.
 
 See [`docs/verification.md`](verification.md). Minimum production requirements:
 
-- SMTP working and DNS authenticated.
+- Resend domain verified and SPF/DKIM/DMARC passing for
+  `noreply@curiousbright.com.ng`; see [email.md](email.md).
+- SMTP working for invitation/moderation mail, if enabled.
 - `PRIVATE_MEDIA_ROOT` on a private persistent volume.
 - `ORG_REGISTRATION_ALLOWED_ORIGINS` includes the portal.
 - Platform staff know the review workflow in Django admin.
@@ -295,19 +345,26 @@ or payment references.
 Run these against production-ish infrastructure:
 
 1. `GET /healthz/` returns ok and database true.
-2. Register/sign in on the member app; profile refresh works after a reload.
-3. Create a post/comment and receive a notification in a second session.
-4. Join a study room; test LiveKit token issuance/video and whiteboard sync.
-5. Open Messages, start a conversation from a profile, send/read/type/delete,
+2. Register on the member app; confirm the verification email arrives, enter the
+   six-digit code, and land signed in with a success alert. Confirm an
+   unverified login returns the verification screen instead of a token.
+3. Repeat registration on the institutional portal; verify the code and enter
+   the portal. Use Forgot password from both apps and confirm each reset link
+   opens the app that requested it.
+4. Create a post/comment and receive a notification in a second session.
+5. Join a study room; test LiveKit token issuance/video and whiteboard sync.
+6. Open Messages, start a conversation from a profile, send/read/type/delete,
    then block and confirm new messages are rejected.
-6. Open the portal; create an organization only from the portal origin.
-7. Submit verification with a PDF; receive and confirm the official-email link;
+7. Open the portal; create an organization only from the portal origin.
+8. Submit verification with a PDF; receive and confirm the official-email link;
    approve/reject in Django admin; confirm the portal banner changes.
-8. As an unverified org, confirm invitations/student creation/join approval are
+9. As an unverified org, confirm invitations/student creation/join approval are
    blocked; after verification, confirm they work.
-9. Search organizations in the member app and confirm only verified orgs appear.
-10. Start a Paystack checkout from both pricing and portal; confirm the portal
+10. Create a student account and import a CSV as the verified org; confirm those
+    accounts sign in without an email verification step.
+11. Search organizations in the member app and confirm only verified orgs appear.
+12. Start a Paystack checkout from both pricing and portal; confirm the portal
     `/billing/verify?reference=...` path and webhook both update the subscription.
-11. Install the member PWA and verify offline shell, no private caching, dark
+13. Install the member PWA and verify offline shell, no private caching, dark
     mode persistence and mobile/tablet/desktop layouts.
-12. Confirm Umami receives only coarse page/section events with no PII.
+14. Confirm Umami receives only coarse page/section events with no PII.

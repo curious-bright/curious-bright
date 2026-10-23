@@ -62,7 +62,9 @@ def custom_exception_handler(exc, context):
     if response is None:
         return None
 
-    code = error_code(exc)
+    # Auth-flow exceptions can choose a stable, specific code while keeping the
+    # shared {"code", "message"} envelope intact.
+    code = getattr(exc, "api_code", None) or error_code(exc)
     message = _first_message(response.data)
     if not message:
         message = _first_message(getattr(exc, "detail", None))

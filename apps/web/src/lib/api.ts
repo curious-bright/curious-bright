@@ -174,6 +174,18 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 }
 
 /**
+ * Strict JSON request for flows that must inspect an API error code (for
+ * example routing an unverified login to the verification screen). Callers are
+ * responsible for surfacing the thrown ApiError.
+ */
+export async function apiFetchStrict<T = any>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<T> {
+  return (await request(endpoint, options)) as T;
+}
+
+/**
  * Run a mutating request where only success/failure matters. Unlike
  * `apiFetch`, a 204 success returns `true` rather than `null`.
  */

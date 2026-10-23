@@ -58,7 +58,7 @@ def send_invitation_email(invitation):
         send_mail(
             subject,
             message,
-            getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng"),
+            getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@curiousbright.com.ng"),
             [invitation.email],
             fail_silently=False,
         )
@@ -71,7 +71,7 @@ def _send(to, subject, message):
         send_mail(
             subject,
             message,
-            getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng"),
+            getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@curiousbright.com.ng"),
             [to],
             fail_silently=False,
         )

@@ -34,7 +34,7 @@ def notify_application_decision(application, actor, approved, note=""):
             send_mail(
                 subject,
                 body,
-                getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng"),
+                getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@curiousbright.com.ng"),
                 [application.user.email],
                 fail_silently=False,
             )

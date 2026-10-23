@@ -1,0 +1,7 @@
+Hi {{ first_name }},
+
+welcome to CuriousBright! Your verification code is {{ code }}. It expires in 10 minutes. If you didn't create an account, you can safely ignore this email.
+
+Open the verification screen: {{ verify_url|safe }}
+
+This is an automated message from a no-reply address. For help, contact {{ support_email }}.

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../state/AuthContext';
+import { ApiError } from '../lib/api';
+import { showError, showSuccess } from '../lib/errorBus';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import iconMark from '../assets/icon-mark.svg';
@@ -13,14 +15,36 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Validation/server errors surface through the global alert — no local try/catch.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !email.trim() || !password) return;
     setLoading(true);
-    const me = await register(username.trim(), email.trim(), password);
-    setLoading(false);
-    if (me) navigate('/feed');
+    try {
+      const result = await register(username.trim(), email.trim(), password);
+      try {
+        sessionStorage.setItem('cb.pending_email', result.email);
+      } catch {
+        // Storage can be unavailable; the email is also in the URL.
+      }
+      navigate(
+        `/verify-email?email=${encodeURIComponent(result.email)}&cooldown=${result.resend_after}`,
+      );
+      if (result.email_sent === false) {
+        showError(
+          'Your account was created, but the verification email could not be sent. Use Resend code to try again.',
+        );
+      } else {
+        showSuccess(`We sent a 6-digit code to ${result.email}. It expires in 10 minutes.`);
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+      } else {
+        showError(err instanceof ApiError ? err.message : 'Could not create your account.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -110,6 +134,11 @@ export default function Register() {
           <Link to="/login" style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
             Sign in
           </Link>
+          <div className="mt-2">
+            <Link to="/verify-email" style={{ color: 'var(--color-faded-ink)', fontWeight: 600 }}>
+              Already registered but not verified?
+            </Link>
+          </div>
         </div>
       </CommentCornerCard>
     </div>

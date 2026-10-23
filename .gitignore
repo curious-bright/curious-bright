@@ -40,4 +40,5 @@ private_media/
 
 # Local credentials / scratch files
 cookies.txt
+/.txt
 

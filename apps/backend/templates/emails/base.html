@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>{% block title %}CuriousBright{% endblock %}</title>
+  <style>
+    /* Inline styles are the source of truth; these rules only improve dark mode
+       in clients that support prefers-color-scheme. */
+    @media (prefers-color-scheme: dark) {
+      .cb-body { background-color: #101014 !important; }
+      .cb-card { background-color: #1b1b22 !important; border-color: #33333d !important; }
+      .cb-ink { color: #f4f1e8 !important; }
+      .cb-muted { color: #b9b5a8 !important; }
+      .cb-line { border-color: #33333d !important; }
+      .cb-code { background-color: #24242d !important; border-color: #43434f !important; color: #ffb199 !important; }
+      .cb-footer { color: #969284 !important; }
+    }
+  </style>
+</head>
+<body class="cb-body" style="margin:0;padding:0;background-color:#F7F6F2;color:#14141A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    {% block preheader %}{% endblock %}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F7F6F2;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="cb-card" style="max-width:560px;background-color:#FFFFFF;border:1px solid #E2DFC9;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="padding:26px 32px 18px 32px;border-bottom:1px solid #E2DFC9;" class="cb-line">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="width:34px;height:34px;background-color:#FF5A36;border-radius:9px;text-align:center;vertical-align:middle;color:#14141A;font-weight:800;font-size:15px;">CB</td>
+                  <td style="padding-left:10px;color:#14141A;font-size:18px;font-weight:800;letter-spacing:-0.02em;" class="cb-ink">Curious Bright</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 32px 30px 32px;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 32px 24px 32px;border-top:1px solid #E2DFC9;" class="cb-line">
+              <p class="cb-footer" style="margin:0;color:#6B685C;font-size:12px;line-height:1.65;text-align:center;">
+                This is an automated message from a no-reply address. For help, contact
+                <a href="mailto:{{ support_email|default:'support@curiousbright.com.ng' }}" style="color:#00A896;text-decoration:underline;">{{ support_email|default:'support@curiousbright.com.ng' }}</a>.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

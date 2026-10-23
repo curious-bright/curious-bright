@@ -5,6 +5,15 @@ from . import views
 
 urlpatterns = [
     path("register/", views.RegisterView.as_view(), name="register"),
+    path("verify-email/", views.VerifyEmailView.as_view(), name="verify_email"),
+    path("resend-code/", views.ResendVerificationCodeView.as_view(), name="resend_code"),
+    path("change-email/", views.ChangeEmailView.as_view(), name="change_email"),
+    path("password-reset/", views.PasswordResetRequestView.as_view(), name="password_reset"),
+    path(
+        "password-reset/confirm/",
+        views.PasswordResetConfirmView.as_view(),
+        name="password_reset_confirm",
+    ),
     # SimpleJWT login + refresh (throttled via scoped rate in override views)
     path("token/", views.RateLimitedTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("token/refresh/", views.RateLimitedTokenRefreshView.as_view(), name="token_refresh"),

@@ -21,6 +21,9 @@ import websiteLogoDark from './assets/website-logo-dark.svg';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Browse from './pages/Browse';
 import Submit from './pages/Submit';
 import Moderate from './pages/Moderate';
@@ -97,7 +100,14 @@ function AppShell() {
   const showRail =
     ['/feed', '/search', '/browse', '/research', '/community', '/notifications'].includes(location.pathname) ||
     location.pathname.startsWith('/profile/');
-  const isAuthScreen = ['/login', '/register', '/mod-login'].includes(location.pathname);
+  const isAuthScreen = [
+    '/login',
+    '/register',
+    '/mod-login',
+    '/verify-email',
+    '/forgot-password',
+    '/reset-password',
+  ].includes(location.pathname);
 
   return (
     <>
@@ -124,6 +134,9 @@ function AppShell() {
                       <Route path="/" element={<Navigate to="/feed" replace />} />
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
+                      <Route path="/verify-email" element={<VerifyEmail />} />
+                      <Route path="/forgot-password" element={<ForgotPassword />} />
+                      <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/feed" element={<Feed />} />
                       <Route path="/post/:id" element={<PostDetail />} />
                       <Route path="/profile/:username" element={<Profile />} />

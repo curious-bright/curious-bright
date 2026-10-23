@@ -152,6 +152,7 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "profile",
             "is_moderator",
+            "is_email_verified",
             "can_moderate",
             "must_change_password",
         ]
@@ -177,12 +178,48 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "username", "email", "password"]
 
+    def validate_email(self, value):
+        normalized = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized).exists():
+            raise serializers.ValidationError("That email is already registered.")
+        return normalized
+
     def create(self, validated_data):
         return User.objects.create_user(
             username=validated_data["username"],
-            email=validated_data["email"],
+            email=validated_data["email"].strip().lower(),
             password=validated_data["password"],
+            is_email_verified=False,
         )
+
+
+class EmailOnlySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(
+        r"^\d{6}$",
+        error_messages={"invalid": "Enter the six-digit code from your email."},
+    )
+
+
+class ChangeEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    new_email = serializers.EmailField()
+
+    def validate(self, attrs):
+        if attrs["email"].strip().lower() == attrs["new_email"].strip().lower():
+            raise serializers.ValidationError("Choose a different email address.")
+        return attrs
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True)
 
 
 class ChangePasswordSerializer(serializers.Serializer):

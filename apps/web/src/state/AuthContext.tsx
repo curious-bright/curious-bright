@@ -1,5 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { apiFetch, apiVoid, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../lib/api';
+import {
+  apiFetch,
+  apiFetchStrict,
+  apiVoid,
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+} from '../lib/api';
 
 export interface BadgeInfo {
   code: string;
@@ -31,8 +39,26 @@ export interface Me {
     created_at: string;
   };
   is_moderator: boolean;
+  is_email_verified: boolean;
   can_moderate: boolean;
   must_change_password: boolean;
+}
+
+export interface RegisterResult {
+  id: number;
+  username: string;
+  email: string;
+  verification_required: boolean;
+  code_expires_in: number;
+  resend_after: number;
+  email_sent: boolean | null;
+  email_queued: boolean;
+}
+
+export interface VerifyEmailResult {
+  access: string;
+  refresh: string;
+  user: Me;
 }
 
 export type ProfilePatch = Partial<{
@@ -48,8 +74,9 @@ interface AuthContextValue {
   user: Me | null;
   loading: boolean;
   isAuthenticated: boolean;
-  login: (identifier: string, password: string) => Promise<Me | null>;
-  register: (username: string, email: string, password: string) => Promise<Me | null>;
+  login: (identifier: string, password: string) => Promise<Me>;
+  register: (username: string, email: string, password: string) => Promise<RegisterResult>;
+  verifyEmail: (email: string, code: string) => Promise<Me>;
   logout: () => Promise<void>;
   refreshMe: (force?: boolean) => Promise<void>;
   updateProfile: (patch: ProfilePatch, avatarFile?: File | null) => Promise<boolean>;
@@ -119,38 +146,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshMe]);
 
   const login = useCallback(
-    async (identifier: string, password: string): Promise<Me | null> => {
-      const data = await apiFetch<{ access: string; refresh: string }>('/auth/token/', {
-        method: 'POST',
-        body: JSON.stringify({ username: identifier, password }),
-      });
-      if (!data?.access) return null;
-      setTokens(data.access, data.refresh);
-      const me = await apiFetch<Me>('/auth/me/');
-      if (!me) {
+    async (identifier: string, password: string): Promise<Me> => {
+      try {
+        const data = await apiFetchStrict<{ access: string; refresh: string }>('/auth/token/', {
+          method: 'POST',
+          body: JSON.stringify({ username: identifier, password }),
+        });
+        setTokens(data.access, data.refresh);
+        const me = await apiFetchStrict<Me>('/auth/me/');
+        setUser(me);
+        setLoading(false);
+        localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
+        broadcastAuthChange();
+        return me;
+      } catch (error) {
         clearTokens();
         setUser(null);
-        return null;
+        throw error;
       }
-      setUser(me);
-      setLoading(false);
-      localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
-      broadcastAuthChange();
-      return me;
     },
     [broadcastAuthChange],
   );
 
   const register = useCallback(
-    async (username: string, email: string, password: string): Promise<Me | null> => {
-      const created = await apiFetch<{ id: number }>('/auth/register/', {
+    async (username: string, email: string, password: string): Promise<RegisterResult> => {
+      return apiFetchStrict<RegisterResult>('/auth/register/', {
         method: 'POST',
         body: JSON.stringify({ username, email, password }),
       });
-      if (!created) return null;
-      return login(username, password);
     },
-    [login],
+    [],
+  );
+
+  const verifyEmail = useCallback(
+    async (email: string, code: string): Promise<Me> => {
+      const data = await apiFetchStrict<VerifyEmailResult>('/auth/verify-email/', {
+        method: 'POST',
+        body: JSON.stringify({ email, code }),
+      });
+      setTokens(data.access, data.refresh);
+      setUser(data.user);
+      setLoading(false);
+      localStorage.setItem(
+        'user',
+        JSON.stringify({ id: data.user.id, name: data.user.username, email: data.user.email }),
+      );
+      broadcastAuthChange();
+      return data.user;
+    },
+    [broadcastAuthChange],
   );
 
   const logout = useCallback(async () => {
@@ -207,12 +251,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       login,
       register,
+      verifyEmail,
       logout,
       refreshMe,
       updateProfile,
       changePassword,
     }),
-    [user, loading, login, register, logout, refreshMe, updateProfile, changePassword],
+    [user, loading, login, register, verifyEmail, logout, refreshMe, updateProfile, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

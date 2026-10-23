@@ -292,6 +292,10 @@ REST_FRAMEWORK = {
         "anon": "200/min",
         "user": "600/min",
         "auth": "10/min",
+        "verify_email": "20/min",
+        "resend_code": "6/min",
+        "change_email": "6/min",
+        "password_reset": "6/min",
     },
 }
 
@@ -330,13 +334,48 @@ if not DEBUG:
 LOGIN_URL = "/admin/login/"
 
 # --- Email (invitations, verification, password reset) ---
+# Existing invitation/moderation mail uses Django's EMAIL_BACKEND. The new
+# transactional flows use EMAIL_PROVIDER: "console"/"django" for local dev and
+# "resend" for production. Keeping the provider explicit means a local .env can
+# retain RESEND_API_KEY for later use without accidentally sending real mail.
 EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", "")
 EMAIL_PORT = env_int("EMAIL_PORT", 587)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@curiousbright.com.ng")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@curiousbright.com.ng")
+EMAIL_FROM_NAME = env("EMAIL_FROM_NAME", "CuriousBright")
+SUPPORT_EMAIL = env("SUPPORT_EMAIL", "support@curiousbright.com.ng")
+EMAIL_REPLY_TO = env("EMAIL_REPLY_TO", SUPPORT_EMAIL)
+EMAIL_PROVIDER = env("EMAIL_PROVIDER", "console" if DEBUG else "resend").lower()
+
+RESEND_API_KEY = env("RESEND_API_KEY", "")
+RESEND_API_URL = env("RESEND_API_URL", "https://api.resend.com/emails")
+RESEND_TIMEOUT_SECONDS = env_int("RESEND_TIMEOUT_SECONDS", 10)
+RESEND_MAX_ATTEMPTS = env_int("RESEND_MAX_ATTEMPTS", 3)
+RESEND_RETRY_BASE_SECONDS = env_int("RESEND_RETRY_BASE_SECONDS", 1)
+
+# Background delivery still lets the resend-code endpoint wait briefly for a
+# result so Resend outages are surfaced to the user immediately.
+EMAIL_DELIVERY_ASYNC = env_bool("EMAIL_DELIVERY_ASYNC", not DEBUG)
+EMAIL_DELIVERY_WAIT_SECONDS = env_int("EMAIL_DELIVERY_WAIT_SECONDS", 8)
+
+EMAIL_VERIFICATION_CODE_TTL_SECONDS = env_int("EMAIL_VERIFICATION_CODE_TTL_SECONDS", 600)
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int(
+    "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+)
+EMAIL_VERIFICATION_MAX_ATTEMPTS = env_int("EMAIL_VERIFICATION_MAX_ATTEMPTS", 5)
+EMAIL_VERIFICATION_EMAIL_HOURLY_LIMIT = env_int(
+    "EMAIL_VERIFICATION_EMAIL_HOURLY_LIMIT", 5
+)
+EMAIL_VERIFICATION_IP_HOURLY_LIMIT = env_int("EMAIL_VERIFICATION_IP_HOURLY_LIMIT", 10)
+
+PASSWORD_RESET_TOKEN_TTL_SECONDS = env_int("PASSWORD_RESET_TOKEN_TTL_SECONDS", 1800)
+PASSWORD_RESET_COOLDOWN_SECONDS = env_int("PASSWORD_RESET_COOLDOWN_SECONDS", 60)
+PASSWORD_RESET_EMAIL_HOURLY_LIMIT = env_int("PASSWORD_RESET_EMAIL_HOURLY_LIMIT", 5)
+PASSWORD_RESET_IP_HOURLY_LIMIT = env_int("PASSWORD_RESET_IP_HOURLY_LIMIT", 10)
+
 ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
 APP_FRONTEND_URL = env("APP_FRONTEND_URL", "https://app.curiousbright.com.ng")
 LANDING_FRONTEND_URL = env("LANDING_FRONTEND_URL", "https://curiousbright.com.ng")

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiFetch, clearTokens } from '../lib/api';
+import { ApiError, apiFetch, clearTokens } from '../lib/api';
+import { showInfo } from '../lib/errorBus';
 import { useAuth } from '../state/AuthContext';
 
 export default function ModeratorLogin() {
@@ -23,25 +24,34 @@ export default function ModeratorLogin() {
     setError('');
     setLoading(true);
 
-    const ok = await login(email.trim(), password);
-    if (!ok) {
-      setError('Invalid credentials. Please check your email/username and password.');
-      setLoading(false);
-      return;
-    }
+    try {
+      await login(email.trim(), password);
 
-    // Fetch a fresh /auth/me/ so the moderator check isn't using stale state.
-    const me = await apiFetch<{ can_moderate: boolean }>('/auth/me/');
-    if (!me?.can_moderate) {
-      clearTokens();
-      localStorage.removeItem('user');
-      await refreshMe();
-      setError('Access denied. This portal is for moderators only.');
-      setLoading(false);
-      return;
-    }
+      // Fetch a fresh /auth/me/ so the moderator check isn't using stale state.
+      const me = await apiFetch<{ can_moderate: boolean }>('/auth/me/');
+      if (!me?.can_moderate) {
+        clearTokens();
+        localStorage.removeItem('user');
+        await refreshMe();
+        setError('Access denied. This portal is for moderators only.');
+        return;
+      }
 
-    navigate('/moderate');
+      navigate('/moderate');
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        showInfo('Verify your email before signing in to the moderator portal.');
+        navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Invalid credentials. Please check your email/username and password.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

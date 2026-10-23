@@ -2958,6 +2958,47 @@ body { font-size: 1rem; line-height: 1.65; }
 @media (max-width: 640px) { .theme-options { grid-template-columns: 1fr; } }
 
 /* ==========================================================================
+   EMAIL VERIFICATION CODE
+   ========================================================================== */
+
+.code-grid {
+  display: flex;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+}
+.code-box {
+  width: 3rem;
+  height: 3.4rem;
+  min-width: 0;
+  padding: 0;
+  border: 1.5px solid var(--color-line-dark);
+  border-radius: 10px;
+  background: var(--color-paper-card);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0;
+}
+.code-box:focus {
+  border-color: var(--color-coral);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  outline: none;
+}
+@media (max-width: 430px) {
+  .code-grid { gap: 0.35rem; }
+  .code-box { width: 2.55rem; height: 3rem; font-size: 1.2rem; border-radius: 8px; }
+}
+html[data-theme="dark"] .code-box {
+  border-color: var(--color-line-dark);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* ==========================================================================
    DARK THEME — follows system by default, saved Light/Dark overrides it
    ========================================================================== */
 

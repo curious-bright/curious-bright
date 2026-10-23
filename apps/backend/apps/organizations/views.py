@@ -722,6 +722,10 @@ def _add_or_link_member(
             password=_new_password(),
             first_name=(first_name or "").strip()[:150],
             last_name=(last_name or "").strip()[:150],
+            # Institution admins create these accounts through a trusted,
+            # authenticated flow; they receive a temporary password instead of
+            # a public verification code.
+            is_email_verified=True,
         )
         temp_password = _new_password()
         user.set_password(temp_password)

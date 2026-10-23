@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../state/AuthContext';
+import { ApiError } from '../lib/api';
+import { showError, showInfo } from '../lib/errorBus';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import iconMark from '../assets/icon-mark.svg';
@@ -12,14 +14,24 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Errors surface through the global alert (lib/api -> errorBus) — no local try/catch.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier.trim() || !password) return;
     setLoading(true);
-    const me = await login(identifier.trim(), password);
-    setLoading(false);
-    if (me) navigate(me.must_change_password ? '/settings?change-password=1' : '/feed');
+    try {
+      const me = await login(identifier.trim(), password);
+      navigate(me.must_change_password ? '/settings?change-password=1' : '/feed');
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        const email = identifier.includes('@') ? identifier.trim() : '';
+        showInfo('Your email is not verified yet. Enter the code we sent, or request a new one.');
+        navigate(`/verify-email${email ? `?email=${encodeURIComponent(email)}` : ''}`);
+      } else {
+        showError(err instanceof ApiError ? err.message : 'Sign-in failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -66,6 +78,11 @@ export default function Login() {
               required
               autoComplete="current-password"
             />
+            <div style={{ textAlign: 'right', marginTop: '0.4rem' }}>
+              <Link to="/forgot-password" style={{ color: 'var(--color-faded-ink)', fontSize: '0.78rem', fontWeight: 600 }}>
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button
@@ -93,6 +110,11 @@ export default function Login() {
           <Link to="/register" style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
             Create an account
           </Link>
+          <div className="mt-2">
+            <Link to="/verify-email" style={{ color: 'var(--color-faded-ink)', fontWeight: 600 }}>
+              Already registered? Verify your email
+            </Link>
+          </div>
         </div>
       </CommentCornerCard>
     </div>

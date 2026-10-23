@@ -40,9 +40,18 @@ Run `manage.py check` and `manage.py makemigrations --check --dry-run` before sh
 | `LIVEKIT_API_KEY` | video | — | LiveKit API key |
 | `LIVEKIT_API_SECRET` | video | — | Server-only LiveKit secret |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | no | `7200` | Video token lifetime |
-| `EMAIL_BACKEND` | no | console | SMTP backend for verification, invitations and join-request email |
-| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials |
-| `DEFAULT_FROM_EMAIL` | no | `no-reply@curiousbright.com.ng` | Invitation/verification sender |
+| `EMAIL_BACKEND` | no | console | Django backend for invitations, join requests and moderation mail |
+| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials for `EMAIL_BACKEND` |
+| `EMAIL_PROVIDER` | prod yes | `console` in DEBUG, `resend` otherwise | Verification/password-reset delivery: `console`, `django` or `resend` |
+| `RESEND_API_KEY` | with Resend | — | Server-only Resend API key; never expose to a frontend |
+| `RESEND_API_URL` | no | `https://api.resend.com/emails` | Resend API endpoint override |
+| `RESEND_TIMEOUT_SECONDS` / `RESEND_MAX_ATTEMPTS` / `RESEND_RETRY_BASE_SECONDS` | no | 10 / 3 / 1 | HTTPS timeout, attempt count and exponential backoff |
+| `DEFAULT_FROM_EMAIL` | no | `noreply@curiousbright.com.ng` | Sender address for all transactional mail |
+| `EMAIL_FROM_NAME` | no | `CuriousBright` | Display name in the From header |
+| `SUPPORT_EMAIL` / `EMAIL_REPLY_TO` | no | `support@curiousbright.com.ng` | Footer contact and Reply-To |
+| `EMAIL_DELIVERY_ASYNC` / `EMAIL_DELIVERY_WAIT_SECONDS` | no | true in prod, false in DEBUG / 8 | Background delivery and resend-endpoint wait |
+| `EMAIL_VERIFICATION_*` | no | 600 / 60 / 5 / 5 / 10 | Code TTL, resend cooldown, max attempts, email and IP hourly limits |
+| `PASSWORD_RESET_*` | no | 1800 / 60 / 5 / 10 | Reset token TTL, cooldown, email and IP hourly limits |
 | `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Portal base; verification email links and default billing callback |
 | `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Member app URL |
 | `LANDING_FRONTEND_URL` | no | `https://curiousbright.com.ng` | Public pricing site, added to CORS |
@@ -57,7 +66,9 @@ Run `manage.py check` and `manage.py makemigrations --check --dry-run` before sh
 | `SOFT_DELETE_UNDO_SECONDS` | no | `300` | Client undo/restore window |
 | `SOFT_DELETE_RETENTION_DAYS` | no | `30` | Purge horizon |
 
-Fixed behaviour: JWT access 30 minutes / refresh 7 days with rotation and blacklisting; throttles `anon 200/min`, `user 600/min`, `auth 10/min`; page size 20.
+Fixed behaviour: JWT access 30 minutes / refresh 7 days with rotation and blacklisting; throttles `anon 200/min`, `user 600/min`, `auth 10/min`, plus scoped `verify_email 20/min`, `resend_code 6/min`, `change_email 6/min` and `password_reset 6/min`; page size 20.
+
+Transactional verification and reset mail uses `EMAIL_PROVIDER` and Resend in production; only hashes of codes/tokens are stored. See [docs/email.md](../../docs/email.md) for Resend setup, the Cloudflare DNS checklist, local console-email testing and pre-launch checks. The Resend key is read only from `RESEND_API_KEY` and must never be committed or exposed to a frontend.
 
 Billing plan prices are seeded through `billing.PlanTier` migrations. `PLAN_DEFINITIONS` in `apps/billing/plans.py` is the fallback, not the production source of truth.
 
@@ -75,12 +86,17 @@ All REST paths below are prefixed with `/api/`. Unless noted, endpoints expect t
 
 ### Authentication and account
 
-- `POST auth/register/`
-- `POST auth/token/` — username **or** email; rate limited
+- `POST auth/register/` — creates an unverified account; returns no JWT
+- `POST auth/verify-email/` — six-digit code; returns JWT + user on success
+- `POST auth/resend-code/` — 60-second cooldown and hourly email/IP limits
+- `POST auth/change-email/` — current password + new email; sends a fresh code
+- `POST auth/password-reset/` — always the same response; single-use 30-minute link
+- `POST auth/password-reset/confirm/` — sets a new password and emails a change notice
+- `POST auth/token/` — username **or** email; unverified accounts get `403 email_unverified`
 - `POST auth/token/refresh/` — rotation + blacklisting
 - `POST auth/logout/`
-- `GET/PATCH auth/me/`
-- `POST auth/change-password/`
+- `GET/PATCH auth/me/` — includes `is_email_verified`
+- `POST auth/change-password/` — also sends a password-changed notice
 - `GET auth/export/` — JSON download of account data
 - `POST auth/delete-account/` — requires password + `"delete my account"`; blocked for organization owners (409 `organization_owner`)
 
@@ -183,6 +199,8 @@ Saving a document creates a revision; restoring a revision creates a new revisio
 - `POST organizations/<slug>/join-requests/<id>/decision/` — approve/reject with optional note
 
 Roles are `owner > admin > moderator > teacher > student > member`. Owners manage billing and deactivation; admins manage lower roles. Pending invitations and active members count against the seat limit. New accounts auto-accept matching invitations and can auto-join an organization with `auto_join_domain`.
+
+Public sign-ups (member app and institutional admin self-signup) must verify their email. Student accounts created directly by an organization admin, including CSV imports, are trusted and marked verified automatically; they receive a temporary password instead of a verification code. Existing accounts were marked verified by migration when this feature shipped.
 
 Organization creation is restricted to `ORG_REGISTRATION_ALLOWED_ORIGINS` (and/or `X-Client-App: institutional`). Verification statuses are `unverified`, `pending`, `verified` and `rejected`. Only verified organizations can create students, invite/link members, join by domain or approve join requests; existing memberships stay active during re-verification. A verified organization that changes its domain returns to unverified. Verification documents use `PRIVATE_MEDIA_ROOT`, PDF/JPEG/PNG signature validation and a 10 MB limit. See [docs/verification.md](../../docs/verification.md).
 

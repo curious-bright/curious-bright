@@ -59,6 +59,10 @@ The active product is the Django API plus the member web app and landing page. `
 
 ### Account and platform
 - JWT auth with refresh rotation/blacklisting, password change and rate limiting.
+- Email-verified registration with a single-use six-digit code, resend cooldown
+  and attempt/IP limits; unverified sign-ins route to the verification screen.
+- Resend-backed password reset with single-use 30-minute links, the same generic
+  response for every address, and a password-changed notice.
 - Profile settings, avatar upload, data export and confirmed account deletion.
 - One `{code, message}` error contract for every API error; one global alert in the web app.
 - Admin dashboard (Unfold) for members, posts, reports, rooms, research and activity.
@@ -205,7 +209,9 @@ Required secrets/services:
 - `REDIS_URL` for multiple workers and cross-worker WebSockets
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` when video is enabled
 - `PAYSTACK_*` when billing is enabled; callback to the portal `/billing/verify`
-- SMTP settings for verification, invitation and join-request emails
+- `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified
+  `curiousbright.com.ng` domain for verification/password-reset mail
+- SMTP settings for invitation, join-request and moderation email
 - `PRIVATE_MEDIA_ROOT` on a persistent **private** volume
 - `APP_FRONTEND_URL`, `ORG_FRONTEND_URL`, `LANDING_FRONTEND_URL`,
   `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS`
@@ -222,7 +228,8 @@ See **[apps/backend/README.md](apps/backend/README.md)** for deployment troubles
 - **[AGENT.md](AGENT.md)** — architecture, API, permissions, realtime, soft delete, frontend and workflow details.
 - **[apps/backend/README.md](apps/backend/README.md)** — backend setup, environment variables, endpoints and deployment.
 - **[docs/deployment.md](docs/deployment.md)** — production deployment for every surface.
-- **[docs/verification.md](docs/verification.md)** — verification statuses, review, private documents and join requests.
+- **[docs/email.md](docs/email.md)** — Resend setup, Cloudflare DNS checklist, local console email and verification/reset tests.
+- **[docs/verification.md](docs/verification.md)** — organization verification statuses, review, private documents and join requests.
 - **[docs/messaging.md](docs/messaging.md)** — private chat data model, API, realtime and privacy boundaries.
 - **[docs/pwa.md](docs/pwa.md)** — manifest, service worker, installability, responsive and dark mode checks.
 - **[docs/analytics.md](docs/analytics.md)** — analytics comparison, Umami recommendation and deployment.

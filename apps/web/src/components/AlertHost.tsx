@@ -1,18 +1,22 @@
 import { useError } from '../state/ErrorContext';
 
 /**
- * Renders the single global alert that every backend/frontend error
- * surfaces through (see lib/errorBus + lib/api).
+ * Renders the single global alert that every backend/frontend error and
+ * success notice surfaces through (see lib/errorBus + lib/api).
  */
 export default function AlertHost() {
   const { error, clearError } = useError();
 
   if (!error) return null;
 
+  const variant = error.variant || 'error';
+  const icon =
+    variant === 'success' ? 'bx-check-circle' : variant === 'info' ? 'bx-info-circle' : 'bx-error-circle';
+
   return (
     <div
-      role="alert"
-      className="alert alert-error"
+      role={variant === 'error' ? 'alert' : 'status'}
+      className={`alert alert-${variant}`}
       style={{
         position: 'fixed',
         top: '1rem',
@@ -29,7 +33,7 @@ export default function AlertHost() {
       }}
     >
       <span className="flex items-start gap-1.5" style={{ flex: 1 }}>
-        <i className="bx bx-error-circle" style={{ fontSize: '1.1rem', marginTop: '0.1rem' }}></i>
+        <i className={`bx ${icon}`} style={{ fontSize: '1.1rem', marginTop: '0.1rem' }}></i>
         <span>{error.message}</span>
       </span>
       <button

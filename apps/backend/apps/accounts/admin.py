@@ -9,11 +9,26 @@ User = get_user_model()
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("username", "email", "is_staff", "is_moderator", "is_active", "date_joined")
+    list_display = (
+        "username",
+        "email",
+        "is_email_verified",
+        "is_staff",
+        "is_moderator",
+        "is_active",
+        "date_joined",
+    )
     search_fields = ("username", "email")
-    list_filter = ("is_staff", "is_moderator", "is_active", "is_superuser")
+    list_filter = (
+        "is_email_verified",
+        "is_staff",
+        "is_moderator",
+        "is_active",
+        "is_superuser",
+    )
     fieldsets = BaseUserAdmin.fieldsets + (
         ("Moderation", {"fields": ("is_moderator",)}),
+        ("Email verification", {"fields": ("is_email_verified",)}),
     )
     actions = [
         "deactivate_users",

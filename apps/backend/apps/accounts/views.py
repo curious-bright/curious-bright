@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import HttpResponse
@@ -16,13 +17,28 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .auth_serializers import UsernameOrEmailTokenSerializer
 from .models import Follow, Profile
 from .serializers import (
+    ChangeEmailSerializer,
     ChangePasswordSerializer,
+    EmailOnlySerializer,
     FollowSerializer,
+    PasswordResetConfirmSerializer,
     ProfileSerializer,
     PublicProfileSerializer,
     PublicUserSerializer,
     RegisterSerializer,
     UserSerializer,
+    VerifyEmailSerializer,
+)
+from .services import (
+    confirm_password_reset,
+    change_pending_email,
+    enforce_verification_send_limits,
+    issue_verification_code,
+    notify_password_changed,
+    request_password_reset,
+    resend_verification_code,
+    tokens_for_user,
+    verify_email_code,
 )
 
 User = get_user_model()
@@ -44,6 +60,161 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Check the per-IP/per-email send limits before creating the account, so
+        # a throttled registration does not leave a half-created user behind.
+        enforce_verification_send_limits(
+            serializer.validated_data["email"].strip().lower(), request
+        )
+        user = serializer.save()
+        _, dispatch = issue_verification_code(
+            user, request, enforce_limits=False, wait=False
+        )
+        return Response(
+            {
+                "id": user.pk,
+                "username": user.username,
+                "email": user.email,
+                "verification_required": True,
+                "code_expires_in": getattr(
+                    settings, "EMAIL_VERIFICATION_CODE_TTL_SECONDS", 600
+                ),
+                "resend_after": getattr(
+                    settings, "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                ),
+                "email_sent": dispatch.sent,
+                "email_queued": dispatch.queued,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "verify_email"
+
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = verify_email_code(
+            serializer.validated_data["email"],
+            serializer.validated_data["code"],
+            request,
+        )
+        payload = tokens_for_user(user)
+        payload["user"] = UserSerializer(user, context={"request": request}).data
+        return Response(payload)
+
+
+class ResendVerificationCodeView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "resend_code"
+
+    def post(self, request):
+        serializer = EmailOnlySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        _, dispatch = resend_verification_code(
+            serializer.validated_data["email"], request
+        )
+        if dispatch is not None and dispatch.sent is False:
+            return Response(
+                {
+                    "code": "email_delivery_failed",
+                    "message": "We couldn't send the email right now. Please try again in a moment.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            {
+                "code": "ok",
+                "message": "If that email is awaiting verification, we sent a new code.",
+                "resend_after": getattr(
+                    settings, "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                ),
+                "email_sent": dispatch.sent if dispatch is not None else None,
+            }
+        )
+
+
+class ChangeEmailView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "change_email"
+
+    def post(self, request):
+        serializer = ChangeEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, dispatch = change_pending_email(
+            serializer.validated_data["email"],
+            serializer.validated_data["password"],
+            serializer.validated_data["new_email"],
+            request,
+        )
+        if dispatch.sent is False:
+            return Response(
+                {
+                    "code": "email_delivery_failed",
+                    "message": "Your email was updated, but we couldn't send the code. Please use Resend code.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            {
+                "code": "ok",
+                "message": "Email updated. We sent a new verification code.",
+                "email": user.email,
+                "resend_after": getattr(
+                    settings, "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                ),
+                "email_sent": dispatch.sent,
+            }
+        )
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        serializer = EmailOnlySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request_password_reset(serializer.validated_data["email"], request)
+        # Always the same response, whether or not the email exists.
+        return Response(
+            {
+                "code": "ok",
+                "message": "If an account exists for that email, we've sent a password reset link.",
+            }
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        confirm_password_reset(
+            serializer.validated_data["uid"],
+            serializer.validated_data["token"],
+            serializer.validated_data["new_password"],
+            request,
+        )
+        return Response(
+            {
+                "code": "ok",
+                "message": "Your password has been reset. You can now sign in.",
+            }
+        )
 
 
 class LogoutView(APIView):
@@ -88,6 +259,8 @@ class ChangePasswordView(APIView):
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save(update_fields=["password"])
         Profile.objects.filter(user=request.user).update(must_change_password=False)
+        # Best-effort security notice; a mail outage must not undo a password change.
+        notify_password_changed(request.user, request)
         return Response({"code": "ok", "message": "Password updated."})
 
 
