@@ -4,33 +4,38 @@ This file is the practical map for anyone (human or AI agent) changing Curious B
 
 ## 1. What the product is
 
-Curious Bright is a community learning platform. Members publish questions, notes and PDF papers, discuss them, follow each other, join study rooms with live chat/video/whiteboard, and collaborate on research documents. Institutions get a separate portal for member management, student onboarding, CSV import/export and Paystack billing.
+Curious Bright is a community learning platform. Members publish questions, notes and PDF papers, discuss them, follow each other, message privately, join study rooms with live chat/video/whiteboard, and collaborate on research documents. Institutions get a separate portal for verification, member management, student onboarding, CSV import/export and Paystack billing.
 
 There are two Git repositories:
 
 | Repository | Purpose |
 |---|---|
-| `curious-bright` (this repository) | Django API, member-facing web app, marketing site, legacy packages |
-| `../curious-bright-institutional` | Standalone React institutional portal. It uses the Django API, not the retired Express billing service. |
+| `curious-bright` (this repository) | Django API, member-facing web app, marketing site, legacy mobile client and its packages |
+| `../curious-bright-institutional` | Standalone React institutional portal. It uses the Django API. |
 
 ## 2. Architecture
 
 ```text
 Member web app (React/Vite, :3000) ─┐
 Institutional portal (React 17, :5174) ─┤
+Landing page (public, pricing) ──────┤
                                      ├── HTTP /api ──> Django + DRF (:8000)
                                      ├── WebSocket /ws ─> Django Channels
-                                     │                    ├── chat + presence
+                                     │                    ├── room chat + presence
+                                     │                    ├── private messages
                                      │                    ├── feed updates
                                      │                    ├── notifications
                                      │                    └── whiteboard
-                                     └── /media ───────> uploaded PDFs/avatars/logos
+                                     ├── /media ───────> public PDFs/avatars/logos
+                                     └── private media ─> verification documents
+                                                          (authenticated downloads only)
 
 Django ──> PostgreSQL (production) or SQLite (local fallback)
        ──> Redis channel layer (optional locally, required for multiple workers)
        ──> LiveKit (tokens minted by Django; media is peer-to-server)
        ──> Paystack (subscription checkout, verify + signed webhook)
-       ──> SMTP or console email (invitations)
+       ──> SMTP or console email (verification, invitations, join requests)
+       ──> Umami (optional; disabled until VITE_UMAMI_* is configured)
 ```
 
 The backend is the source of truth for permissions, visibility, pricing, and account state. Never rely on a hidden frontend button for authorization.
@@ -48,8 +53,10 @@ apps/backend/
   apps/moderation/        reports, review queue, moderator applications
   apps/rooms/             study rooms, members, chat, LiveKit tokens,
                           whiteboard snapshot
-  apps/organizations/     institutional memberships, invitations, CSV/students
+  apps/organizations/     institutional verification, memberships, invitations,
+                          join requests, CSV/students
   apps/billing/           plans, Paystack, subscriptions, webhooks
+  apps/messaging/         one-to-one conversations, messages, blocks, reports
   apps/realtime/          Channels consumers, routing, broadcast helpers
   apps/core/              soft-delete base model, audit log, error envelope,
                           pagination, permissions, health/search views
@@ -57,20 +64,22 @@ apps/backend/
 apps/web/                 member-facing React app
   src/lib/api.ts          authenticated API wrapper and token refresh
   src/lib/realtime.ts     reconnecting WebSocket hook
-  src/state/              auth, feed, notification and alert contexts
+  src/lib/analytics.ts    optional Umami tracker (no-op unless configured)
+  src/state/              auth, feed, notification, alert, theme and messaging
+                          contexts
   src/pages/              route-level screens
   src/components/         shared UI (PostCard, Room video/whiteboard, modals…)
-  src/index.css           design tokens + all paper-notebook styling
+  src/index.css           design tokens (light + dark) and all styling
   public/                 PWA manifest, service worker, icons
 
-apps/landing-page/        marketing site (separate Vite app)
+apps/landing-page/        public marketing site and /pricing (separate Vite app)
+docs/                     deployment, verification, messaging, PWA and analytics
 apps/mobile/              legacy Expo app — not part of the current deploy
-apps/realtime-gateway/    retired Socket.io gateway
-apps/signaling-service/   retired WebRTC signaling service
-packages/                 legacy shared TypeScript packages
+packages/ui-kit/          shared design tokens used by the member and landing apps
+packages/                 supporting TypeScript packages for the legacy mobile client
 ```
 
-The active stack is Django + the two React clients. Files under `apps/mobile`, `apps/realtime-gateway`, `apps/signaling-service` and most of `packages/` are retained for history and are not used by the deployed product.
+The active stack is Django + the two React clients. `apps/mobile` and the packages it uses are retained for history and are not used by the deployed product.
 
 ## 4. Local setup
 
@@ -117,9 +126,10 @@ Local ports: API `8000`, member web `3000`, institutional portal `5174`.
 
 - Backend: `apps/backend/.env.example` → `.env`. `config/settings.py` calls `load_dotenv()`; existing process env vars win.
 - Member web: `apps/web/.env.example` → `.env`.
-- Institutional portal: `apps/institutional-web/.env.example` → `.env`.
+- Landing page: `apps/landing-page/.env.example` → `.env`.
+- Institutional portal: `../curious-bright-institutional/apps/institutional-web/.env.example` → `.env`.
 
-Do not commit `.env`, real API keys, Paystack secrets, LiveKit secrets, or production passwords.
+Do not commit `.env`, real API keys, Paystack secrets, LiveKit secrets, analytics credentials, or production passwords.
 
 ## 5. Authentication and API conventions
 
@@ -133,7 +143,7 @@ Do not commit `.env`, real API keys, Paystack secrets, LiveKit secrets, or produ
 - Request correlation is returned in the `X-Request-ID` response header.
 - All endpoints use trailing slashes. List endpoints are paginated as `{count, next, previous, results}` unless documented otherwise.
 
-Common error codes include `validation_error`, `unauthenticated`, `unauthorized`, `forbidden`, `not_found`, `throttled`, `conflict`, `restore_window_expired`, `seat_limit_reached`, `plan_not_purchasable`, `billing_not_configured`, `livekit_not_configured`, and `organization_owner`.
+Common error codes include `validation_error`, `unauthenticated`, `unauthorized`, `forbidden`, `not_found`, `throttled`, `conflict`, `restore_window_expired`, `seat_limit_reached`, `plan_not_purchasable`, `billing_not_configured`, `livekit_not_configured`, `already_verified`, `organization_not_verified` and `organization_owner`.
 
 ## 6. Permissions, roles and visibility
 
@@ -160,6 +170,17 @@ Public serializers must never expose email. Author/user payloads use `PublicUser
 - Owners can manage billing and deactivate an organization. Admins can manage lower-ranked members and invitations.
 - Members/invitation seat counts include active members and pending invitations.
 - Organization owners cannot delete their account until ownership is transferred or the organization is removed/deactivated. The API returns HTTP 409 with code `organization_owner`.
+- Organization verification status is `unverified`, `pending`, `verified` or `rejected`. Only verified organizations can invite/link members, create student accounts, use domain auto-join or approve join requests. Existing memberships stay active during re-verification.
+- Creating an organization is restricted to the portal origin (`ORG_REGISTRATION_ALLOWED_ORIGINS`) and/or `X-Client-App: institutional`. This is a UX guard; authorization still comes from the authenticated user.
+- Only verified organizations appear in member-app join search and may receive join requests. A verified organization that changes its email domain drops back to `unverified` and must be reviewed again.
+- Platform staff review verification in Django admin and must record a note on rejection. Verification documents live in private storage and are available only to org admins and staff.
+
+### Private messaging
+
+- Conversations are one-to-one only. All reads are participant-scoped and return 404 to outsiders; platform staff cannot browse conversations through normal APIs, and organization admins have no access at all.
+- `Profile.message_privacy` (`anyone`, `follows`, `nobody`) applies only to starting a conversation. Existing conversations stay open.
+- Blocking is directional but prevents new messages in both directions; history remains. Deleting your own message is a delete-for-everyone tombstone, not a per-user hide.
+- Message reports are handled by platform moderators in Django admin. Never expose message content, participants or reports through analytics or application logs.
 
 ## 7. Soft delete, undo and audit
 
@@ -190,14 +211,18 @@ Channels routes (`apps/realtime/routing.py`):
 | `/ws/notifications/` | signed-in member notifications |
 | `/ws/rooms/<room_id>/` | chat, typing, presence and room events |
 | `/ws/rooms/<room_id>/whiteboard/` | collaborative whiteboard events |
+| `/ws/messages/` | per-user unread totals and conversation-list updates |
+| `/ws/conversations/<id>/` | participant-only typing and read receipts |
 
 Feed updates are published to visibility-aware groups (`feed.discover`, `feed.user.<id>`, `post.<id>`, `room.<id>`). Never broadcast private content to the discover group.
 
 Room chat is persisted in the database and also broadcast. `POST /api/rooms/<id>/join/` must happen before reading messages, posting messages, minting video tokens, or opening the whiteboard.
 
-Video uses LiveKit. The browser calls `POST /api/rooms/<id>/livekit-token/`; Django returns a short-lived token and the public WebSocket URL. Without LiveKit env vars the endpoint returns 503 `livekit_not_configured` and the UI shows a friendly setup message.
+Video uses LiveKit. The browser calls `POST /api/rooms/<id>/livekit-token/`; Django returns a short-lived token and the public WebSocket URL. The backend reads exactly `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, accepts `https://` URLs by normalising them to `wss://`, and exposes only the public URL/status at `GET /api/livekit/config/`. Without valid config the token endpoint returns 503 `livekit_not_configured` and the member app shows a global setup alert instead of failing silently.
 
 The whiteboard stores a bounded snapshot on `Room.whiteboard_data` in normalized `0..1000` coordinates. Complete strokes are persisted; in-progress drawing is relayed as ephemeral `whiteboard.draw` events. Clearing the board is host-only. The HTTP fallback is `GET/DELETE /api/rooms/<id>/whiteboard/`.
+
+Private messages are REST for history/sending and WebSockets for live delivery. `/ws/messages/` updates the unread badge and conversation list; `/ws/conversations/<id>/` is participant-only and carries typing and read events. Messages sent while offline are not replayed by the socket, so clients refetch history on reconnect.
 
 ## 9. Key API surface
 
@@ -207,9 +232,11 @@ All paths below are prefixed by `/api/`.
 - **Profiles/follows:** `auth/profiles/<username>/`, `auth/profiles/<username>/follow/`, `auth/profiles/<username>/is-following/`, `auth/profiles/<username>/followers/`, `auth/profiles/<username>/following/`
 - **Community:** `posts/`, `posts/<id>/`, `posts/<id>/like/`, `posts/<id>/solve/`, `posts/<id>/comments/`, `comments/<id>/`, `comments/<id>/helpful/`, `comments/<id>/accept/`, `posts/<id>/restore/`, `comments/<id>/restore/`, `posts/<id>/activity/`, `feed/discover/`, `feed/following/`, `notifications/`, `notifications/read-all/`
 - **Moderation:** `posts/<id>/flag/`, `moderation/queue/`, `moderation/queue/<id>/approve/`, `moderation/queue/<id>/reject/`, `moderation/reports/`, `moderation/reports/<id>/resolve/`, `moderator-applications/`, `moderator-applications/me/`, `moderator-applications/<id>/approve|decline/`
-- **Rooms:** `rooms/`, `rooms/<id>/`, `rooms/<id>/join/`, `rooms/<id>/members/`, `rooms/<id>/messages/`, `rooms/<id>/livekit-token/`, `rooms/<id>/whiteboard/`, `rooms/<id>/restore/`
+- **Rooms:** `rooms/`, `rooms/<id>/`, `rooms/<id>/join/`, `rooms/<id>/members/`, `rooms/<id>/messages/`, `rooms/<id>/livekit-token/`, `rooms/<id>/whiteboard/`, `rooms/<id>/restore/`, `livekit/config/`
 - **Research:** `research/`, `research/<id>/`, `research/<id>/restore/`, `research/<id>/invite/`, `research/<id>/revisions/`, `research/<id>/revisions/<revision_id>/restore/`, `research/invitations/`, `research/invitations/<id>/respond/`
-- **Organizations:** `organizations/`, `organizations/<slug>/`, `organizations/<slug>/members/`, `organizations/<slug>/members/invite/`, `organizations/<slug>/members/<id>/`, `organizations/<slug>/members/link/`, `organizations/<slug>/invitations/`, `organizations/<slug>/invitations/<id>/`, `organizations/<slug>/students/`, `organizations/<slug>/students/import/`, `organizations/<slug>/members.csv`, `organizations/students/template/`, `organizations/<slug>/stats/`, `organizations/<slug>/audit-logs/`, `organizations/invitations/me/`, `organizations/invitations/<uuid>/accept/`, `organizations/join-by-domain/`
+- **Organizations:** `organizations/`, `organizations/<slug>/`, `organizations/<slug>/members/`, `organizations/<slug>/members/invite/`, `organizations/<slug>/members/<id>/`, `organizations/<slug>/members/link/`, `organizations/<slug>/invitations/`, `organizations/<slug>/invitations/<id>/`, `organizations/<slug>/students/`, `organizations/<slug>/students/import/`, `organizations/<slug>/members.csv`, `organizations/students/template/`, `organizations/<slug>/stats/`, `organizations/<slug>/audit-logs/`, `organizations/invitations/me/`, `organizations/invitations/<uuid>/accept/`, `organizations/join-by-domain/`, `organizations/search/?q=`
+- **Verification/join requests:** `organizations/<slug>/verification/`, `organizations/<slug>/verification/resend/`, `organizations/<slug>/verification/document/`, `organizations/verification/email/<uuid>/`, `organizations/<slug>/join-requests/`, `organizations/join-requests/me/`, `organizations/join-requests/<id>/withdraw/`, `organizations/<slug>/join-requests/<id>/decision/`
+- **Private messaging:** `messages/conversations/`, `messages/conversations/<id>/`, `messages/conversations/<id>/messages/`, `messages/conversations/<id>/read/`, `messages/<id>/`, `messages/<id>/report/`, `messages/unread/`, `messages/blocks/`, `messages/blocks/<username>/`
 - **Billing:** `billing/plans/`, `billing/checkout/`, `billing/payments/<reference>/`, `billing/payments/<reference>/verify/`, `billing/webhook/paystack/`, `organizations/<slug>/subscription/`, `organizations/<slug>/subscribe/`
 - **Search/health:** `search/?q=`, `/healthz/`
 
@@ -222,8 +249,9 @@ All paths below are prefixed by `/api/`.
 - `accounts.User` / `Profile` / `Follow`
 - `community.Post` / `Comment` / `Like` / `HelpfulReaction` / `Equation` / `Notification`
 - `rooms.Room` / `RoomMember` / `RoomMessage` (whiteboard snapshot lives on `Room`)
+- `messaging.Conversation` / `ConversationParticipant` / `Message` / `UserBlock` / `MessageReport`
 - `research.ResearchDocument` / `Collaboration` / `ResearchDocumentRevision`
-- `organizations.Organization` / `OrganizationMembership` / `OrganizationInvitation` / `OrganizationAuditLog`
+- `organizations.Organization` / `OrganizationMembership` / `OrganizationInvitation` / `OrganizationAuditLog` / `OrganizationVerification` / `OrganizationVerificationEvent` / `OrganizationJoinRequest`
 - `billing.PlanTier` / `Payment` / `OrganizationSubscription` / `WebhookEvent`
 - `gamification.Badge` / `UserBadge`
 - `moderation.Report` / `ModeratorApplication`
@@ -237,20 +265,35 @@ Plan prices are seeded in migrations. `billing.PlanTier` rows override the fallb
 - `AuthContext` owns login/register/logout, profile updates, token state, and exposes `followStatus`.
 - `FeedContext` owns discover/following feeds, optimistic likes/follows, post CRUD, soft delete and undo. It deduplicates in-flight loads and respects the current tab's visibility.
 - `NotificationContext` polls notifications and handles read-all.
+- `ThemeContext` resolves System/Light/Dark, writes `data-theme` and `color-scheme`, syncs across tabs and is seeded pre-paint by an inline script to avoid a flash.
+- `MessagingContext` owns conversations, active thread, unread counts and the `/ws/messages/` badge socket. `Messages.tsx` adds the participant socket for typing/read events.
 - `AlertHost` + `errorBus` show one global error message per failed API call. Pages do not duplicate error toasts.
 - All HTTP goes through `src/lib/api.ts`: `apiFetch` (JSON/null), `apiVoid` (204 success = true), `apiDownload` (authenticated files). It normalizes `/api` paths, attaches JWT, refreshes once on 401, and surfaces `{code,message}`.
 - `useRealtime` in `src/lib/realtime.ts` reconnects with exponential backoff and always calls the latest handler closure.
 - Heavy tools are lazy-loaded: `Room.tsx` (LiveKit + whiteboard) and `Read.tsx` (react-pdf). Vite splits `livekit-client` and `react-pdf`/`pdfjs-dist` into separate chunks.
-- `Settings.tsx` handles profile fields, password change, data export, and account deletion.
+- `Settings.tsx` handles profile fields, message privacy, appearance, password change, data export, and account deletion.
 - `PostDetail.tsx` handles comments, replies, edit, delete/restore, moderation actions, activity history, and answer acceptance.
+- `JoinOrganization.tsx` searches verified organizations, sends/withdraws requests and shows the learner's request status. Starting a conversation is available from profiles and room member lists.
+- `LiveKitAlert.tsx` checks `GET /api/livekit/config/` and shows one global warning when video is not configured.
+
+### Analytics
+
+`src/lib/analytics.ts` loads Umami only when `VITE_UMAMI_SCRIPT_URL` and `VITE_UMAMI_WEBSITE_ID` are set; otherwise every call is a no-op. Pageviews are sent manually without query strings. Product events are coarse labels only (for example `organization_join_requested`). Never add message content, names, emails, search queries, document data, payment references or organization identifiers. See `docs/analytics.md`.
 
 ### Design system
 
-The visual language is a warm paper notebook: cream background, coral primary, teal accent, mustard highlights, hand-drawn borders and soft shadows. Tokens live at the top of `src/index.css` (`--color-*`, `--space-*`, `--radius-*`, etc.). Compatibility aliases such as `glass-card` are deliberate; older pages still use them. Add new styles from the tokens and reuse existing classes (`.paper-panel`, `.btn`, `.badge-tag`, `.field`, `.room-*`) instead of introducing a second design system.
+The visual language is a warm paper notebook: cream background, coral primary, teal accent, mustard highlights, hand-drawn borders and soft shadows. Tokens live at the top of `src/index.css` (`--color-*`, `--space-*`, `--radius-*`, etc.). The light palette is the original palette and must not drift. Dark mode is implemented with `html[data-theme="dark"]` token overrides; new components must use tokens so both themes keep WCAG AA contrast. Compatibility aliases such as `glass-card` are deliberate; older pages still use them. Add new styles from the tokens and reuse existing classes (`.paper-panel`, `.btn`, `.badge-tag`, `.field`, `.room-*`) instead of introducing a second design system.
+
+### Responsive shell
+
+- Mobile (< 1024 px): sticky top bar, bottom tabs (Home, Search, Rooms, Messages, Profile), floating compose button and safe-area padding.
+- Tablet: icon-only left rail, centered feed, no right suggestions panel.
+- Desktop: full left nav, centered feed, right suggestions rail.
+- Messages appears in desktop navigation and the mobile bottom bar, with an unread badge.
 
 ### PWA
 
-`public/manifest.webmanifest` and `public/sw.js` provide an installable shell. The service worker caches the app shell and same-origin static assets, **never** `/api`, `/ws`, or `/admin` responses. It registers in production only. Any new static shell file added to the precache list must actually exist, or `cache.addAll` fails.
+`public/manifest.webmanifest` and `public/sw.js` provide an installable shell. The manifest starts at `/feed` and declares 192/512/maskable icons. The service worker caches the app shell and same-origin static assets, **never** `/api`, `/ws`, `/admin` or cross-origin responses. It registers in production only. Any new static shell file added to the precache list must actually exist, or `cache.addAll` fails. Bump the service-worker cache version when the shell changes.
 
 Profile usernames may contain dots. Vite's dev server normally treats dotted paths as files, so `vite.config.ts` rewrites HTML requests under `/profile/*` to `index.html`. Production hosting still needs an SPA fallback rewrite for `/profile/*` and the other client routes.
 
@@ -258,16 +301,19 @@ Profile usernames may contain dots. Vite's dev server normally treats dotted pat
 
 The portal is a separate Vite app in `../curious-bright-institutional/apps/institutional-web`.
 
-- It talks to the Django API via `src/lib/api.ts` (JWT Bearer, snake_case fields, typed responses).
+- It talks to the Django API via `src/lib/api.ts` (JWT Bearer, snake_case fields, typed responses). Every request also sends `X-Client-App: institutional`.
 - Development: `/api` and `/media` are proxied to `http://localhost:8000`; `VITE_API_URL` should stay blank.
-- Production: set `VITE_API_URL` to the full API base including `/api` (for example `https://api.curiousbright.com.ng/api`). For a Cloudflare/static deployment, also provide an SPA fallback for `/invitations/*`.
-- Views: organization overview/stats, members, invitations, student CSV import/creation/linking, billing plans and subscription checkout, organization settings/audit/deactivation.
+- Production: set `VITE_API_URL` to the full API base including `/api` (for example `https://api.curiousbright.com.ng/api`). For a Cloudflare/static deployment, also provide an SPA fallback for `/invitations/*`, `/verification/email/*` and `/billing/verify`.
+- Views: organization overview/stats, members, invitations, student CSV import/creation/linking, join-request review, verification, billing plans and subscription checkout, organization settings/audit/deactivation.
+- A persistent verification banner and modal show status/reviewer notes, allow document download/resubmission and resend the official-email confirmation. Student/invite/link controls are disabled until verified, and the API enforces the same rule.
 - Invitation links use `${ORG_FRONTEND_URL}/invitations/<uuid>` from Django and land on the portal acceptance gate.
-- It does **not** call the legacy Express billing app. Billing is `POST /api/organizations/<slug>/subscribe/` and Paystack verification happens in Django.
+- Billing is `POST /api/organizations/<slug>/subscribe/` and Paystack verification happens in Django. The callback lands on `/billing/verify?reference=...`, which calls the authenticated Django verification endpoint.
+- The landing page's `/pricing` CTAs pass `plan`, `interval` and `currency` to the portal; the portal opens the filtered billing view. Pricing lives only on the public landing page.
+- It loads Umami only when both `VITE_UMAMI_*` variables are set and sends only coarse section/event labels.
 
 ## 13. Tests and validation
 
-Backend suite (currently 106 tests):
+Backend suite (currently 136 tests):
 
 ```bash
 cd apps/backend
@@ -281,22 +327,28 @@ Builds:
 ```bash
 cd /path/to/curious-bright
 pnpm --filter web build
+pnpm --filter landing-page build
 
 cd /path/to/curious-bright-institutional
 pnpm --filter institutional-web build
 ```
 
-The backend tests cover visibility, PII-safe serializers, editing/conflict handling, soft delete/undo, comments for authors/moderators, rooms, WebSockets, whiteboard persistence, research revisions, organization permissions/CSV/students, billing, profile counts, account deletion, and the error contract. Add a regression test when fixing a bug in one of these areas.
+The backend tests cover visibility, PII-safe serializers, editing/conflict handling, soft delete/undo, comments for authors/moderators, rooms, WebSockets, whiteboard persistence, research revisions, organization permissions/CSV/students, verification and join-request security, private messaging and conversation privacy, billing, profile counts, account deletion, and the error contract. Add a regression test when fixing a bug in one of these areas.
 
 ## 14. Deployment
 
 - Backend image is built from the root `Dockerfile`; `apps/backend/scripts/start.sh` runs migrations, optional admin bootstrap, `collectstatic`, then uvicorn/ASGI.
 - Required production services: PostgreSQL and Redis. Set `DATABASE_URL` and `REDIS_URL`.
-- Required secrets: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`; Paystack/LiveKit/SMTP values as needed.
+- Required secrets/config: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, `WS_ALLOWED_ORIGINS`, `ORG_REGISTRATION_ALLOWED_ORIGINS`, `PRIVATE_MEDIA_ROOT`, plus Paystack/LiveKit/SMTP values as needed.
 - Run with more than one worker only when `REDIS_URL` is configured; otherwise WebSockets are in-process.
-- WhiteNoise serves static files. Media currently uses the container filesystem and is served by Django; mount a persistent volume or move to object storage before relying on uploads.
-- Paystack webhook target: `https://<api-host>/api/billing/webhook/paystack/`. The endpoint validates the HMAC-SHA512 signature and is idempotent.
-- The institutional portal can be deployed to Cloudflare Pages/Workers or any static host, with `VITE_API_URL` set at build time and SPA rewrites configured.
+- WhiteNoise serves static files. Public media uses the container filesystem and is served by Django; mount a persistent volume or move to object storage before relying on uploads.
+- Verification documents use a **separate private volume** at `PRIVATE_MEDIA_ROOT`; never expose it through `/media/`, nginx/Caddy static roots or a public CDN.
+- Paystack callback: `https://org.curiousbright.com.ng/billing/verify`. Paystack webhook: `https://<api-host>/api/billing/webhook/paystack/`. The endpoint validates the HMAC-SHA512 signature and is idempotent.
+- LiveKit requires the exact `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. `GET /api/livekit/config/` is the public status endpoint; the global alert covers misconfiguration.
+- The institutional portal can be deployed to Cloudflare Pages/Workers or any static host, with `VITE_API_URL` ending in `/api` and SPA rewrites for invitation, email-confirmation and billing-verification routes.
+- The member app must be served with SPA rewrites and a non-long-cached `/sw.js`; see `docs/pwa.md`.
+- Analytics is optional and disabled until `VITE_UMAMI_SCRIPT_URL` and `VITE_UMAMI_WEBSITE_ID` are set at build time. See `docs/analytics.md`.
+- Operational details: `docs/deployment.md`, `docs/verification.md`, `docs/messaging.md`, `docs/pwa.md`, `docs/analytics.md`.
 
 ## 15. Change workflow
 
@@ -311,8 +363,10 @@ The backend tests cover visibility, PII-safe serializers, editing/conflict handl
 
 ## 16. Known limitations
 
-- The legacy Expo app, Socket.io gateway, WebRTC signaling service, and legacy packages are not part of the active deploy.
-- Media storage is local/container filesystem until an object-storage backend is added.
-- The institutional portal has no automated frontend test suite yet; verify with `pnpm build` and a browser smoke test.
+- The legacy Expo app and the packages used only by it are not part of the active deploy. They must not be deleted without the cleanup approval process in the project instructions.
+- Public and verification media use local/container filesystems until object storage is added; verification media must stay private.
+- The institutional portal and member/landing apps have no automated frontend test suite yet; verify with production builds and browser smoke tests.
 - Search is `icontains`-based and capped per section, not a dedicated search engine.
-- Production SPA hosting must provide rewrites for dotted profile URLs and the other React routes.
+- Production SPA hosting must provide rewrites for dotted profile URLs, invitation/email-confirmation links and the other React routes.
+- Analytics remains disabled until an Umami host and website IDs are provisioned and the tool choice is explicitly confirmed.
+- Production SMTP delivery must be confirmed before treating verification/join-email flows as production-ready.

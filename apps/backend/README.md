@@ -32,18 +32,22 @@ Run `manage.py check` and `manage.py makemigrations --check --dry-run` before sh
 | `DATABASE_URL` | **prod yes** | empty → SQLite | `postgres://user:pass@host:5432/db` |
 | `USE_SQLITE` | no | `false` | Force SQLite locally |
 | `CORS_ALLOWED_ORIGINS` | **prod yes** | local web/portal origins | Browser origins allowed to call the API and open WebSockets |
+| `WS_ALLOWED_ORIGINS` | prod recommended | derived from CORS | Explicit WebSocket origin allow-list |
+| `ORG_REGISTRATION_ALLOWED_ORIGINS` | prod yes | portal + localhost | Origins allowed to create an organization; the portal also sends `X-Client-App` |
 | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | — | Bootstrap superuser for `ensure_admin`; never commit real values |
 | `REDIS_URL` | prod recommended | — | Channels Redis layer; required for multiple ASGI workers |
-| `LIVEKIT_URL` | video | — | Public LiveKit WebSocket URL (`wss://…`) |
+| `LIVEKIT_URL` | video | — | Exact public LiveKit WebSocket URL (`wss://…`) |
 | `LIVEKIT_API_KEY` | video | — | LiveKit API key |
 | `LIVEKIT_API_SECRET` | video | — | Server-only LiveKit secret |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | no | `7200` | Video token lifetime |
-| `EMAIL_BACKEND` | no | console | SMTP backend for invitations, e.g. `django.core.mail.backends.smtp.EmailBackend` |
+| `EMAIL_BACKEND` | no | console | SMTP backend for verification, invitations and join-request email |
 | `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials |
-| `DEFAULT_FROM_EMAIL` | no | `no-reply@curiousbright.com.ng` | Invitation sender |
-| `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Institutional portal base used in invitation links |
-| `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Member app URL; billing callback derives from it |
-| `BILLING_CALLBACK_URL` | no | `${APP_FRONTEND_URL}/payment/verify` | Paystack return URL |
+| `DEFAULT_FROM_EMAIL` | no | `no-reply@curiousbright.com.ng` | Invitation/verification sender |
+| `ORG_FRONTEND_URL` | no | `https://org.curiousbright.com.ng` | Portal base; verification email links and default billing callback |
+| `APP_FRONTEND_URL` | no | `https://app.curiousbright.com.ng` | Member app URL |
+| `LANDING_FRONTEND_URL` | no | `https://curiousbright.com.ng` | Public pricing site, added to CORS |
+| `PRIVATE_MEDIA_ROOT` | **prod yes** | `apps/backend/private_media` | Private verification-document storage; never serve as `/media/` |
+| `BILLING_CALLBACK_URL` | no | `${ORG_FRONTEND_URL}/billing/verify` | Paystack return URL handled by the portal |
 | `PAYSTACK_PUBLIC_KEY` | billing | — | Public key |
 | `PAYSTACK_SECRET_KEY` | billing | — | Server key and default webhook signature secret |
 | `PAYSTACK_WEBHOOK_SECRET` | no | falls back to secret key | Separate webhook secret |
@@ -131,6 +135,7 @@ Visibility options are `public`, `followers`, and `room_only` (requires `room`).
 - `GET rooms/<id>/members/`
 - `GET/POST rooms/<id>/messages/` — `?after=<id>` returns newer messages
 - `POST rooms/<id>/livekit-token/` — 503 `livekit_not_configured` when env is missing
+- `GET livekit/config/` — public, secret-free configuration status for the global alert
 - `GET/DELETE rooms/<id>/whiteboard/` — snapshot and host-only clear
 
 Join a room before reading/sending messages, minting a video token or opening the whiteboard. Room hosts and organization admins/owners can edit or delete rooms.
@@ -167,8 +172,32 @@ Saving a document creates a revision; restoring a revision creates a new revisio
 - `GET organizations/invitations/me/`
 - `POST organizations/invitations/<uuid>/accept/`
 - `POST organizations/join-by-domain/`
+- `GET/POST organizations/<slug>/verification/` — read or submit verification (admins)
+- `POST organizations/<slug>/verification/resend/` — resend official-email confirmation
+- `POST organizations/verification/email/<uuid:token>/` — public, single-use email confirmation
+- `GET organizations/<slug>/verification/document/` — private document download (org admins or staff)
+- `GET organizations/search/?q=` — verified organizations only
+- `GET/POST organizations/<slug>/join-requests/` — admin list or learner create
+- `GET organizations/join-requests/me/` — learner's requests
+- `POST organizations/join-requests/<id>/withdraw/`
+- `POST organizations/<slug>/join-requests/<id>/decision/` — approve/reject with optional note
 
 Roles are `owner > admin > moderator > teacher > student > member`. Owners manage billing and deactivation; admins manage lower roles. Pending invitations and active members count against the seat limit. New accounts auto-accept matching invitations and can auto-join an organization with `auto_join_domain`.
+
+Organization creation is restricted to `ORG_REGISTRATION_ALLOWED_ORIGINS` (and/or `X-Client-App: institutional`). Verification statuses are `unverified`, `pending`, `verified` and `rejected`. Only verified organizations can create students, invite/link members, join by domain or approve join requests; existing memberships stay active during re-verification. A verified organization that changes its domain returns to unverified. Verification documents use `PRIVATE_MEDIA_ROOT`, PDF/JPEG/PNG signature validation and a 10 MB limit. See [docs/verification.md](../../docs/verification.md).
+
+### Private messaging
+
+- `GET/POST messages/conversations/`
+- `GET messages/conversations/<id>/`
+- `GET/POST messages/conversations/<id>/messages/`
+- `POST messages/conversations/<id>/read/`
+- `DELETE messages/<id>/` — own message tombstone
+- `POST messages/<id>/report/`
+- `GET messages/unread/`
+- `GET messages/blocks/` and `POST/DELETE messages/blocks/<username>/`
+
+Conversations are strictly one-to-one. Reads are participant-scoped and return 404 to outsiders; organization admins and moderators cannot read them. `Profile.message_privacy` controls new conversations (`anyone`, `follows`, `nobody`); existing conversations continue unless either user blocks the other. See [docs/messaging.md](../../docs/messaging.md).
 
 ### Billing
 
@@ -196,6 +225,8 @@ WebSocket URL prefix: `/ws/`. Authenticate with `?token=<access>`.
 - `/ws/notifications/` — signed-in notifications
 - `/ws/rooms/<room_id>/` — chat, typing and presence for members
 - `/ws/rooms/<room_id>/whiteboard/` — strokes, live draw relay, undo and host clear
+- `/ws/messages/` — per-user unread/conversation-list updates
+- `/ws/conversations/<conversation_id>/` — participant-only typing and read receipts
 
 Feed events are published only to groups appropriate to their visibility (`feed.discover`, `feed.user.<id>`, `post.<id>`, `room.<id>`). Private content must never reach the discover group. Room and whiteboard sockets reject non-members during connection.
 
@@ -231,7 +262,7 @@ cd apps/backend
 .venv/bin/python manage.py test
 ```
 
-Current suite: **106 tests**. It covers the error contract, visibility, PII-safe serializers, comment tombstones, edit conflicts, soft delete/undo, rooms, LiveKit error paths, whiteboard persistence, WebSocket permissions, research revisions, organization roles/CSV/students, billing, viewer-accurate profile counts, and organization-owner deletion guards.
+Current suite: **136 tests**. It covers the error contract, visibility, PII-safe serializers, comment tombstones, edit conflicts, soft delete/undo, rooms, LiveKit error paths, whiteboard persistence, WebSocket permissions, private messaging and conversation privacy, research revisions, organization roles/CSV/students, verification/join-request security, billing, viewer-accurate profile counts, and organization-owner deletion guards.
 
 ## Deployment (Northflank / Docker)
 
@@ -241,8 +272,10 @@ Current suite: **106 tests**. It covers the error contract, visibility, PII-safe
 - Required secrets: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`. `ADMIN_*` are optional.
 - For multi-worker realtime, link Redis and set `REDIS_URL`.
 - For video, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
-- For billing, set `PAYSTACK_SECRET_KEY`; point the Paystack webhook at `https://<api-host>/api/billing/webhook/paystack/`.
+- For billing, set `PAYSTACK_SECRET_KEY`; point the Paystack webhook at `https://<api-host>/api/billing/webhook/paystack/` and the return URL at `https://org.curiousbright.com.ng/billing/verify`.
 - Media is served from the container filesystem (even with debug off). Attach a persistent volume at `apps/backend/media` or switch to object storage.
+- Verification documents use a separate private storage root (`PRIVATE_MEDIA_ROOT`). Attach a second persistent private volume; never expose it through the public media proxy/CDN.
+- Set `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS` explicitly in production.
 - Verify a deploy with `GET /healthz/`, then `GET /api/posts/`.
 
 ### Stale database migration troubleshooting

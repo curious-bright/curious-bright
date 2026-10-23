@@ -15,7 +15,7 @@ Members publish questions, notes and papers, discuss explanations, follow each o
 | Marketing site | React 18, Vite | `apps/landing-page` |
 | Institutional portal | React 17, Vite | separate repository: `../curious-bright-institutional` |
 
-The active product is the Django API plus the member web app. The Expo app, Socket.io gateway, WebRTC signaling service and legacy TypeScript packages are retained for history but are not part of the current deployment.
+The active product is the Django API plus the member web app and landing page. `apps/mobile` is a retained legacy Expo client and is not part of the current deployment; the package workspaces it uses remain available for that client.
 
 ## Features
 
@@ -35,17 +35,39 @@ The active product is the Django API plus the member web app. The Expo app, Sock
 
 ### Institutions and billing
 - Organization membership roles (owner/admin/moderator/teacher/student/member).
+- Organization verification with private registration documents, official-domain
+  email confirmation, staff review, rejection reasons and resubmission.
+- Student join requests with verified-organization search, admin approve/reject,
+  notifications and email decisions.
+- Organization creation is restricted to the institutional portal origin; only
+  verified organizations can create students, invite members, link accounts or
+  approve join requests. Existing memberships stay active during re-verification.
 - Bulk email invitations, invitation links, domain auto-join and student account creation.
 - CSV student import, member CSV export and existing-account linking.
 - Organization stats, audit log, seat limits and deactivation.
 - Paystack billing plans in NGN/USD, checkout, verification, signed webhooks and subscriptions.
+- Public pricing page for NGO, Research Institute and University tiers, with
+  Naira/USD and monthly/annual pricing.
+
+### Private messaging
+- One-to-one realtime conversations over Channels with history in PostgreSQL.
+- Conversation list, unread counts, typing indicators, sent/read state and
+  delete-for-everyone tombstones.
+- Message privacy (`anyone`, `follows`, `nobody`), blocking and reporting.
+- Start a conversation from a profile or room member list; only participants
+  can read a conversation, and organization admins have no access.
 
 ### Account and platform
 - JWT auth with refresh rotation/blacklisting, password change and rate limiting.
 - Profile settings, avatar upload, data export and confirmed account deletion.
 - One `{code, message}` error contract for every API error; one global alert in the web app.
 - Admin dashboard (Unfold) for members, posts, reports, rooms, research and activity.
-- Responsive paper-notebook design system, accessible modals, mobile member panel and offline app shell.
+- Responsive paper-notebook design system with desktop/tablet/mobile shells,
+  accessible modals, installable PWA and an offline app shell.
+- Light palette unchanged; optional System/Light/Dark appearance with AA contrast
+  targets and a pre-paint theme script to prevent flashing.
+- Privacy-first Umami analytics integration (disabled until configured); no
+  message content or personal data is ever tracked.
 
 ## Architecture
 
@@ -53,9 +75,12 @@ The active product is the Django API plus the member web app. The Expo app, Sock
 apps/web (React) ───────────────┐
 institutional portal (React) ───┤
                                 ├── /api  ──> Django REST API
-                                ├── /ws   ──> Django Channels (chat, feeds,
-                                │             notifications, whiteboard)
-                                └── /media ─> uploaded PDFs, avatars, logos
+                                ├── /ws   ──> Django Channels (room chat, private
+                                │             messages, feeds, notifications,
+                                │             whiteboard)
+                                ├── /media ─> public PDFs, avatars, logos
+                                └── private media ─> verification documents
+                                                     (authenticated downloads only)
 
 Django ──> PostgreSQL or SQLite
        ──> Redis channel layer (needed for multiple ASGI workers)
@@ -149,7 +174,7 @@ The webhook verifies the HMAC-SHA512 signature and is idempotent. USD checkout a
 ## Tests and builds
 
 ```bash
-# Backend (106 tests)
+# Backend (136 tests)
 cd apps/backend
 .venv/bin/python manage.py test
 
@@ -178,8 +203,12 @@ Required secrets/services:
 - `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`
 - `DATABASE_URL` (PostgreSQL)
 - `REDIS_URL` for multiple workers and cross-worker WebSockets
-- `LIVEKIT_*` and `PAYSTACK_*` when those features are enabled
-- SMTP settings for real invitation emails (console email is the local default)
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` when video is enabled
+- `PAYSTACK_*` when billing is enabled; callback to the portal `/billing/verify`
+- SMTP settings for verification, invitation and join-request emails
+- `PRIVATE_MEDIA_ROOT` on a persistent **private** volume
+- `APP_FRONTEND_URL`, `ORG_FRONTEND_URL`, `LANDING_FRONTEND_URL`,
+  `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS`
 
 Health check: `GET /healthz/` → `200 {"status": "ok", "database": true}`.
 
@@ -192,6 +221,11 @@ See **[apps/backend/README.md](apps/backend/README.md)** for deployment troubles
 
 - **[AGENT.md](AGENT.md)** — architecture, API, permissions, realtime, soft delete, frontend and workflow details.
 - **[apps/backend/README.md](apps/backend/README.md)** — backend setup, environment variables, endpoints and deployment.
+- **[docs/deployment.md](docs/deployment.md)** — production deployment for every surface.
+- **[docs/verification.md](docs/verification.md)** — verification statuses, review, private documents and join requests.
+- **[docs/messaging.md](docs/messaging.md)** — private chat data model, API, realtime and privacy boundaries.
+- **[docs/pwa.md](docs/pwa.md)** — manifest, service worker, installability, responsive and dark mode checks.
+- **[docs/analytics.md](docs/analytics.md)** — analytics comparison, Umami recommendation and deployment.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — contribution guidance.
 
 ## License

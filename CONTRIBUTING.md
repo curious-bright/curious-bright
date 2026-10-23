@@ -29,7 +29,7 @@ pnpm --filter web dev
 
 Optional infrastructure (PostgreSQL, Redis, LiveKit) can be started with `docker compose up -d`. Update `apps/backend/.env` with `DATABASE_URL` / `REDIS_URL` if you use it.
 
-The institutional portal lives in the separate `curious-bright-institutional` repository. It uses the same Django API and does not use the retired Express billing service.
+The institutional portal lives in the separate `curious-bright-institutional` repository. It uses the same Django API.
 
 ## What to work on
 
@@ -39,7 +39,7 @@ Active surfaces:
 - `apps/web` — member-facing React/Vite app.
 - `apps/landing-page` — marketing site.
 
-Legacy surfaces (`apps/mobile`, `apps/realtime-gateway`, `apps/signaling-service`, most of `packages/`) are not part of the current deploy. Avoid adding new features there unless the issue explicitly targets them.
+`apps/mobile` is a retained legacy Expo client and is not part of the current deploy. Avoid adding new features there unless the issue explicitly targets it. `packages/ui-kit` remains active for the member and landing apps; the other package workspaces support the legacy mobile client.
 
 ## Coding standards
 
