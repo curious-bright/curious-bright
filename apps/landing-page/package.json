@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@curious-bright/types": "workspace:*",
     "@curious-bright/ui-kit": "workspace:*",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",

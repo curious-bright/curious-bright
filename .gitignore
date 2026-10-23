@@ -8,10 +8,6 @@ dist/
 # Environment files
 .env
 .env.local
-packages/database/.env
-
-# Prisma
-packages/database/prisma/migrations/
 
 # IDE
 .vscode/
@@ -40,6 +36,7 @@ __pycache__/
 venv/
 staticfiles/
 media/
+private_media/
 
 # Local credentials / scratch files
 cookies.txt

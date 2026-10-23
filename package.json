@@ -16,11 +16,7 @@
     "web:dev": "pnpm --filter web dev",
     "web:build": "pnpm --filter web build",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "db:generate": "pnpm --filter @curious-bright/database generate",
-    "db:push": "pnpm --filter @curious-bright/database db:push",
-    "db:studio": "pnpm --filter @curious-bright/database db:studio",
-    "postinstall": "pnpm db:generate"
+    "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
     "turbo": "^2.0.0",
