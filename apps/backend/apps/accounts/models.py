@@ -17,6 +17,11 @@ class User(AbstractUser):
 
 
 class Profile(models.Model):
+    class MessagePrivacy(models.TextChoices):
+        ANYONE = "anyone", "Anyone"
+        FOLLOWS = "follows", "People I follow back"
+        NOBODY = "nobody", "Nobody new"
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     bio = models.TextField(blank=True, max_length=500)
     avatar = models.URLField(blank=True, max_length=500)
@@ -25,6 +30,12 @@ class Profile(models.Model):
     country = models.CharField(max_length=100, blank=True, default="")
     school = models.CharField(max_length=200, blank=True, default="")
     must_change_password = models.BooleanField(default=False)
+    message_privacy = models.CharField(
+        max_length=12,
+        choices=MessagePrivacy.choices,
+        default=MessagePrivacy.ANYONE,
+        help_text="Who can start a new private conversation with you.",
+    )
 
     post_count = models.PositiveIntegerField(default=0)
     followers_count = models.PositiveIntegerField(default=0)

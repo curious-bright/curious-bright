@@ -7,6 +7,7 @@ from django.test import TransactionTestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.community.models import Post
+from apps.messaging.models import Conversation, ConversationParticipant, Message
 from apps.realtime.routing import websocket_urlpatterns
 from apps.rooms.models import Room, RoomMember
 from config.asgi import JWTAuthMiddleware
@@ -26,6 +27,24 @@ class RealtimeConsumerTests(TransactionTestCase):
         self.room = Room.objects.create(name="Realtime", topic="Testing", created_by=self.user)
         RoomMember.objects.create(room=self.room, user=self.user)
         self.token = str(AccessToken.for_user(self.user))
+        self.chat_partner = User.objects.create_user(
+            username="chatpartner",
+            email="chatpartner@example.com",
+            password="Str0ng!Passw0rd99",
+        )
+        self.conversation, _ = Conversation.between(self.user, self.chat_partner)
+        ConversationParticipant.objects.get_or_create(
+            conversation=self.conversation, user=self.user
+        )
+        ConversationParticipant.objects.get_or_create(
+            conversation=self.conversation, user=self.chat_partner
+        )
+        Message.objects.create(
+            conversation=self.conversation,
+            sender=self.chat_partner,
+            body="Hello over the socket",
+        )
+        self.chat_token = str(AccessToken.for_user(self.chat_partner))
 
     async def test_feed_socket_receives_broadcast(self):
         communicator = WebsocketCommunicator(_app(), "/ws/feed/")
@@ -159,3 +178,53 @@ class RealtimeConsumerTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertFalse(connected)
         await communicator.disconnect()
+
+    async def test_messages_socket_reports_unread_and_rejects_anonymous(self):
+        anonymous = WebsocketCommunicator(_app(), "/ws/messages/")
+        connected, _ = await anonymous.connect()
+        self.assertFalse(connected)
+        await anonymous.disconnect()
+
+        communicator = WebsocketCommunicator(_app(), f"/ws/messages/?token={self.token}")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        event = await communicator.receive_json_from()
+        self.assertEqual(event["event"], "messages.connected")
+        self.assertEqual(event["data"]["unread"], 1)
+        await communicator.disconnect()
+
+    async def test_conversation_socket_is_private_and_broadcasts_typing(self):
+        user_socket = WebsocketCommunicator(
+            _app(),
+            f"/ws/conversations/{self.conversation.pk}/?token={self.token}",
+        )
+        partner_socket = WebsocketCommunicator(
+            _app(),
+            f"/ws/conversations/{self.conversation.pk}/?token={self.chat_token}",
+        )
+        self.assertTrue((await user_socket.connect())[0])
+        self.assertTrue((await partner_socket.connect())[0])
+        await user_socket.receive_json_from()
+        await partner_socket.receive_json_from()
+
+        await user_socket.send_json_to({"type": "typing", "is_typing": True})
+        event = await partner_socket.receive_json_from()
+        self.assertEqual(event["event"], "conversation.typing")
+        self.assertEqual(event["data"]["user"]["username"], "wsuser")
+
+        outsider = await database_sync_to_async(User.objects.create_user)(
+            username="chatoutsider",
+            email="chatoutsider@example.com",
+            password="Str0ng!Passw0rd99",
+        )
+        outsider_token = await database_sync_to_async(
+            lambda: str(AccessToken.for_user(outsider))
+        )()
+        denied = WebsocketCommunicator(
+            _app(),
+            f"/ws/conversations/{self.conversation.pk}/?token={outsider_token}",
+        )
+        self.assertFalse((await denied.connect())[0])
+        await denied.disconnect()
+        await user_socket.disconnect()
+        await partner_socket.disconnect()

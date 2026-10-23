@@ -99,7 +99,11 @@ class ProfileSerializer(PublicProfileSerializer):
     avatar_file = serializers.FileField(required=False, allow_null=True, write_only=True)
 
     class Meta(PublicProfileSerializer.Meta):
-        fields = PublicProfileSerializer.Meta.fields + ["email", "avatar_file"]
+        fields = PublicProfileSerializer.Meta.fields + [
+            "email",
+            "avatar_file",
+            "message_privacy",
+        ]
         read_only_fields = [
             "post_count",
             "followers_count",
