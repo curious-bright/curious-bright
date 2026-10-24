@@ -128,12 +128,12 @@ const FALLBACK_PLANS: Record<PlanCode, ApiPlan> = {
 
 const FALLBACK_PRICES: Record<PlanCode, Record<Currency, { month: string; year: string }>> = {
   ngo: {
-    NGN: { month: '₦25,000', year: '₦250,000' },
-    USD: { month: '$25', year: '$250' },
+    NGN: { month: '₦35,000', year: '₦350,000' },
+    USD: { month: '$26.3', year: '$263' },
   },
   research_institute: {
-    NGN: { month: '₦60,000', year: '₦600,000' },
-    USD: { month: '$60', year: '$600' },
+    NGN: { month: '₦75,000', year: '₦750,000' },
+    USD: { month: '$57', year: '$570' },
   },
   university: {
     NGN: { month: '₦150,000', year: '₦1,500,000' },
