@@ -17,9 +17,13 @@ def first_name_for(user) -> str:
 
 
 def _context(user, **extra):
+    app_url = (
+        getattr(settings, "APP_FRONTEND_URL", "") or "https://app.curiousbright.com.ng"
+    ).rstrip("/")
     context = {
         "first_name": first_name_for(user),
         "support_email": getattr(settings, "SUPPORT_EMAIL", "support@curiousbright.com.ng"),
+        "logo_url": f"{app_url}/icon-192.png",
     }
     context.update(extra)
     return context

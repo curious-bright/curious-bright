@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#14213D"/>
+
+  <!-- connecting ring: the community -->
+  <circle cx="256" cy="256" r="128" fill="none" stroke="#FFB627" stroke-width="8" opacity="0.55"/>
+
+  <!-- three people, gathered -->
+  <circle cx="256" cy="128" r="18" fill="#FFB627"/>
+  <circle cx="366" cy="320" r="18" fill="#FFB627"/>
+  <circle cx="146" cy="320" r="18" fill="#FFB627"/>
+
+  <!-- shared spark: the bright idea they build together -->
+  <path d="M256,198 Q272,240 314,256 Q272,272 256,314 Q240,272 198,256 Q240,240 256,198 Z"
+        fill="#FBF7F0"/>
+</svg>

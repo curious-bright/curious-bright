@@ -40,6 +40,7 @@ from .services import (
     tokens_for_user,
     verify_email_code,
 )
+from .ws_tickets import issue_ws_ticket
 
 User = get_user_model()
 
@@ -215,6 +216,25 @@ class PasswordResetConfirmView(APIView):
                 "message": "Your password has been reset. You can now sign in.",
             }
         )
+
+
+class WebSocketTicketView(APIView):
+    """Trade an authenticated request for a single-use WebSocket ticket."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "ws_ticket"
+
+    def post(self, request):
+        ticket = issue_ws_ticket(request.user.pk)
+        response = Response(
+            {
+                "ticket": ticket,
+                "expires_in": int(getattr(settings, "WS_TICKET_TTL_SECONDS", 60)),
+            }
+        )
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 class LogoutView(APIView):

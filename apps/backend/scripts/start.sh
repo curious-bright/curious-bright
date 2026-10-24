@@ -31,4 +31,5 @@ exec uvicorn config.asgi:application \
   --workers "${WORKERS}" \
   --proxy-headers \
   --forwarded-allow-ips="*" \
-  --access-log
+  --access-log \
+  --log-config config/logging.json

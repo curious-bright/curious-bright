@@ -18,6 +18,7 @@ urlpatterns = [
     path("token/", views.RateLimitedTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("token/refresh/", views.RateLimitedTokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", views.LogoutView.as_view(), name="logout"),
+    path("ws-ticket/", views.WebSocketTicketView.as_view(), name="ws_ticket"),
     path("me/", views.MeView.as_view(), name="me"),
     path("change-password/", views.ChangePasswordView.as_view(), name="change_password"),
     path("export/", views.ExportAccountView.as_view(), name="account_export"),

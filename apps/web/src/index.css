@@ -116,7 +116,7 @@ a {
 }
 
 /* App Shell Layout */
-.sidebar-brand-mark { display: none; }
+.sidebar-brand-mark { display: none; width: 40px; height: 40px; border-radius: 10px; }
 .app-shell {
   display: flex;
   min-height: 100vh;
@@ -2706,21 +2706,14 @@ body { font-size: 1rem; line-height: 1.65; }
   :root { --sidebar-width: 84px; }
   .app-sidebar { width: 84px; padding: 1rem 0.55rem; align-items: center; }
   .app-main { padding: 1.5rem 1.25rem; }
-  .sidebar-header img { display: none; }
+  .sidebar-header .sidebar-brand-logo { display: none !important; }
   .sidebar-header { width: 100%; margin-bottom: 1rem !important; padding-bottom: 0.8rem !important; }
   .sidebar-brand-mark {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
+    display: block !important;
     width: 40px;
     height: 40px;
     margin: 0 auto;
-    border-radius: 4px 0 4px 4px;
-    background: var(--color-ink);
-    color: var(--color-paper);
-    font-family: var(--font-display);
-    font-size: 0.95rem;
-    font-weight: 800;
+    border-radius: 10px;
   }
   .sidebar-search { display: none !important; }
   .sidebar-section-label { display: none !important; }

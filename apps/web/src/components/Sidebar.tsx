@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import appIcon from '../assets/app-icon.svg';
 import websiteLogo from '../assets/website-logo.svg';
 import websiteLogoDark from '../assets/website-logo-dark.svg';
 import { useAuth } from '../state/AuthContext';
@@ -63,9 +64,14 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen?: boolean; cl
           <img
             src={theme === 'dark' ? websiteLogoDark : websiteLogo}
             alt="Curious Bright"
+            className="sidebar-brand-logo"
             style={{ height: 44, width: 'auto', maxWidth: '100%', display: 'block' }}
           />
-          <span className="sidebar-brand-mark" aria-hidden="true">CB</span>
+          <img
+            src={appIcon}
+            alt="Curious Bright"
+            className="sidebar-brand-mark"
+          />
         </Link>
       </div>
 

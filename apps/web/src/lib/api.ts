@@ -186,6 +186,24 @@ export async function apiFetchStrict<T = any>(
 }
 
 /**
+ * Ask the API for a single-use WebSocket credential. Keeping the JWT out of
+ * the socket URL means access logs never contain a replayable access token.
+ * Returns null when the request fails; callers fall back to a token for one
+ * release so older backends keep working.
+ */
+export async function createWebSocketTicket(): Promise<string | null> {
+  try {
+    const data = await apiFetchStrict<{ ticket?: string }>('/api/auth/ws-ticket/', {
+      method: 'POST',
+    });
+    const ticket = data?.ticket;
+    return typeof ticket === 'string' && ticket ? ticket : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Run a mutating request where only success/failure matters. Unlike
  * `apiFetch`, a 204 success returns `true` rather than `null`.
  */

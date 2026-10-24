@@ -1,4 +1,5 @@
 """Django settings for the LearnBridge project (knowledge-sharing + research community)."""
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -9,6 +10,8 @@ from django.urls import reverse_lazy
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+logger = logging.getLogger(__name__)
 
 # Local development convenience: read apps/backend/.env if present. Existing
 # process environment variables always win, so deployment secrets are never
@@ -275,6 +278,23 @@ else:
         "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     }
 
+# Short-lived WebSocket tickets are exchanged for a socket URL so the access
+# token never has to travel in a query string. The alias is separate from the
+# default cache on purpose: a ticket lookup must not add Redis as a hard
+# dependency for throttling and every other HTTP request.
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "ws_tickets": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+}
+if REDIS_URL:
+    CACHES["ws_tickets"] = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "ws-ticket",
+    }
+
+WS_TICKET_TTL_SECONDS = env_int("WS_TICKET_TTL_SECONDS", 60)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -296,6 +316,7 @@ REST_FRAMEWORK = {
         "resend_code": "6/min",
         "change_email": "6/min",
         "password_reset": "6/min",
+        "ws_ticket": "60/min",
     },
 }
 
@@ -349,6 +370,21 @@ EMAIL_FROM_NAME = env("EMAIL_FROM_NAME", "CuriousBright")
 SUPPORT_EMAIL = env("SUPPORT_EMAIL", "support@curiousbright.com.ng")
 EMAIL_REPLY_TO = env("EMAIL_REPLY_TO", SUPPORT_EMAIL)
 EMAIL_PROVIDER = env("EMAIL_PROVIDER", "console" if DEBUG else "resend").lower()
+
+# A console mail backend writes full message bodies — including verification
+# codes and password-reset links — to stdout, where they end up in the hosting
+# platform's log stream. That is expected locally but never in production.
+if EMAIL_PROVIDER == "console":
+    logger.warning(
+        "EMAIL_PROVIDER=console: transactional email bodies (codes and reset "
+        "links) are written to stdout. Set EMAIL_PROVIDER=resend in production."
+    )
+if not DEBUG and "console" in EMAIL_BACKEND:
+    logger.error(
+        "EMAIL_BACKEND is the console backend while DJANGO_DEBUG=False: "
+        "invitation and moderation email will be written to logs. Configure "
+        "SMTP or set EMAIL_BACKEND explicitly."
+    )
 
 RESEND_API_KEY = env("RESEND_API_KEY", "")
 RESEND_API_URL = env("RESEND_API_URL", "https://api.resend.com/emails")

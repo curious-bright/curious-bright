@@ -449,6 +449,8 @@ class ResendDeliveryTests(TestCase):
             self.assertIn("CuriousBright <noreply@curiousbright.com.ng>", payload["from"])
             self.assertIn("This is an automated message from a no-reply address.", payload["text"])
             self.assertIn("This is an automated message from a no-reply address.", payload["html"])
+            self.assertIn("icon-192.png", payload["html"])
+            self.assertIn('alt="Curious Bright"', payload["html"])
 
             link = re.search(r"https?://\S+", payload["text"]).group(0)
             parsed = urlparse(link)
