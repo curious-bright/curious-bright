@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model, password_validation
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
+from apps.core.legal import consent_status
+
 from .models import Follow, Profile
 
 User = get_user_model()
@@ -143,6 +145,7 @@ class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
     can_moderate = serializers.SerializerMethodField()
     must_change_password = serializers.SerializerMethodField()
+    consent = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -155,6 +158,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_email_verified",
             "can_moderate",
             "must_change_password",
+            "consent",
         ]
 
     def get_can_moderate(self, obj):
@@ -163,6 +167,9 @@ class UserSerializer(serializers.ModelSerializer):
     def get_must_change_password(self, obj):
         profile = getattr(obj, "profile", None)
         return bool(profile and profile.must_change_password)
+
+    def get_consent(self, obj):
+        return consent_status(obj)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -173,16 +180,29 @@ class RegisterSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
         validators=[UniqueValidator(queryset=User.objects.all(), message="That email is already registered.")]
     )
+    accept_terms = serializers.BooleanField(write_only=True)
+    accept_privacy = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "password"]
+        fields = ["id", "username", "email", "password", "accept_terms", "accept_privacy"]
 
     def validate_email(self, value):
         normalized = value.strip().lower()
         if User.objects.filter(email__iexact=normalized).exists():
             raise serializers.ValidationError("That email is already registered.")
         return normalized
+
+    def validate(self, attrs):
+        if not attrs.get("accept_terms") or not attrs.get("accept_privacy"):
+            raise serializers.ValidationError(
+                {
+                    "accept_terms": (
+                        "You must accept the Terms of Use and Privacy Policy to create an account."
+                    )
+                }
+            )
+        return attrs
 
     def create(self, validated_data):
         return User.objects.create_user(
@@ -191,6 +211,18 @@ class RegisterSerializer(serializers.ModelSerializer):
             password=validated_data["password"],
             is_email_verified=False,
         )
+
+
+class ConsentAcceptSerializer(serializers.Serializer):
+    accept_terms = serializers.BooleanField()
+    accept_privacy = serializers.BooleanField()
+
+    def validate(self, attrs):
+        if not attrs.get("accept_terms") or not attrs.get("accept_privacy"):
+            raise serializers.ValidationError(
+                "Accept both the Terms of Use and Privacy Policy to continue."
+            )
+        return attrs
 
 
 class EmailOnlySerializer(serializers.Serializer):

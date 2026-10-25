@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.community.models import Post
@@ -19,13 +20,14 @@ from apps.core.models import ContentAuditLog
 from apps.realtime.broadcast import publish
 
 from .livekit import livekit_config
-from .models import Room, RoomMember, RoomMessage
+from .models import Room, RoomMember, RoomMessage, VideoSession
 from .serializers import (
     RoomMemberSerializer,
     RoomMessageCreateSerializer,
     RoomMessageSerializer,
     RoomSerializer,
     RoomWriteSerializer,
+    VideoSessionSerializer,
 )
 
 
@@ -185,6 +187,116 @@ class JoinRoomView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({"code": "ok", "message": "You left the study room."})
+
+
+class VideoSessionStartView(APIView):
+    """Start (or resume) an aggregate-only video-call timer."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "video_session"
+
+    def post(self, request, pk):
+        room = get_object_or_404(Room, pk=pk)
+        if not _require_member(request.user, room):
+            return Response(
+                {"code": "forbidden", "message": "Join the room before starting a call."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        now = timezone.now()
+        active = (
+            VideoSession.objects.filter(
+                room=room, user=request.user, left_at__isnull=True
+            )
+            .order_by("-joined_at")
+            .first()
+        )
+        if active and (now - active.last_heartbeat_at).total_seconds() <= 120:
+            return Response(
+                {
+                    **VideoSessionSerializer(active).data,
+                    "resumed": True,
+                    "heartbeat_interval": 30,
+                }
+            )
+        if active:
+            active.left_at = active.last_heartbeat_at
+            active.duration_seconds = max(
+                0,
+                min(
+                    int((active.last_heartbeat_at - active.joined_at).total_seconds()),
+                    8 * 60 * 60,
+                ),
+            )
+            active.save(update_fields=["left_at", "duration_seconds"])
+        session = VideoSession.objects.create(room=room, user=request.user)
+        return Response(
+            {
+                **VideoSessionSerializer(session).data,
+                "resumed": False,
+                "heartbeat_interval": 30,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class VideoSessionHeartbeatView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "video_session"
+
+    def post(self, request, pk, session_id):
+        room = get_object_or_404(Room, pk=pk)
+        session = get_object_or_404(
+            VideoSession, pk=session_id, room=room, user=request.user
+        )
+        if session.left_at is not None:
+            return Response(
+                {"code": "session_ended", "message": "This video session has ended."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        now = timezone.now()
+        session.last_heartbeat_at = now
+        session.duration_seconds = max(
+            0,
+            min(
+                int((now - session.joined_at).total_seconds()),
+                8 * 60 * 60,
+            ),
+        )
+        session.save(update_fields=["last_heartbeat_at", "duration_seconds"])
+        return Response(VideoSessionSerializer(session).data)
+
+
+class VideoSessionEndView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "video_session"
+
+    def post(self, request, pk, session_id):
+        room = get_object_or_404(Room, pk=pk)
+        session = get_object_or_404(
+            VideoSession, pk=session_id, room=room, user=request.user
+        )
+        if session.left_at is None:
+            now = timezone.now()
+            session.left_at = now
+            session.last_heartbeat_at = now
+            session.duration_seconds = max(
+                0,
+                min(
+                    int((now - session.joined_at).total_seconds()),
+                    8 * 60 * 60,
+                ),
+            )
+            session.save(
+                update_fields=[
+                    "left_at",
+                    "last_heartbeat_at",
+                    "duration_seconds",
+                ]
+            )
+        return Response(VideoSessionSerializer(session).data)
 
 
 class RoomMembersView(generics.ListAPIView):

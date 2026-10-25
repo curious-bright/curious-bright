@@ -9,6 +9,7 @@ import RightRail from './components/RightRail';
 import FloatingCompose from './components/FloatingCompose';
 import LiveKitAlert from './components/LiveKitAlert';
 import AnalyticsTracker from './components/AnalyticsTracker';
+import PolicyConsentGate from './components/PolicyConsentGate';
 import { PageTurnContainer } from './components/PageTurnContainer';
 import { ErrorProvider } from './state/ErrorContext';
 import { AuthProvider, useAuth } from './state/AuthContext';
@@ -114,6 +115,7 @@ function AppShell() {
       <AlertHost />
       <UndoToast />
       <AnalyticsTracker />
+      <PolicyConsentGate />
       <ErrorBoundary>
         <div className="app-shell">
           <div

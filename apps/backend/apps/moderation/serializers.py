@@ -15,7 +15,7 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = [
             "id", "reporter", "post_id", "post_title", "post_author",
-            "reason", "is_resolved", "created_at",
+            "reason", "is_resolved", "resolved_at", "created_at",
         ]
 
 

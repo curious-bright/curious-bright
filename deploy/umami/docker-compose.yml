@@ -1,0 +1,93 @@
+# Self-hosted, cookieless Umami analytics for Curious Bright.
+# The database is deliberately separate from the Django PostgreSQL database.
+name: curiousbright-umami
+
+services:
+  umami-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - umami-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - umami
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    restart: unless-stopped
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    environment:
+      DATABASE_TYPE: postgresql
+      DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@umami-db:5432/umami
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env}
+      TRACKER_SCRIPT_NAME: ${TRACKER_SCRIPT_NAME:-script.js}
+      DISABLE_TELEMETRY: "1"
+    ports:
+      # Bind to localhost only. Cloudflare Tunnel or a reverse proxy should be
+      # the only thing exposed to the internet.
+      - "127.0.0.1:${UMAMI_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/heartbeat').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - umami
+
+  # Optional: expose the dashboard and collector through Cloudflare Tunnel
+  # without opening inbound ports. Set CLOUDFLARE_TUNNEL_TOKEN in .env and run:
+  #   docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - umami
+    networks:
+      - umami
+
+  # Optional: Caddy reverse proxy for a public origin using a Cloudflare
+  # Origin CA certificate. Run with: docker compose --profile caddy up -d
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["caddy"]
+    depends_on:
+      - umami
+    environment:
+      UMAMI_DOMAIN: ${UMAMI_DOMAIN:-analytics.curiousbright.com.ng}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - umami
+
+volumes:
+  umami-db:
+  caddy-data:
+  caddy-config:
+
+networks:
+  umami:
+    driver: bridge

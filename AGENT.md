@@ -34,7 +34,8 @@ Django ──> PostgreSQL (production) or SQLite (local fallback)
        ──> Redis channel layer (optional locally, required for multiple workers)
        ──> LiveKit (tokens minted by Django; media is peer-to-server)
        ──> Paystack (subscription checkout, verify + signed webhook)
-       ──> SMTP or console email (verification, invitations, join requests)
+       ──> Resend/console transactional email (accounts, invitations, join requests)
+       ──> SMTP or console email (moderation approval notices only)
        ──> Umami (optional; disabled until VITE_UMAMI_* is configured)
 ```
 
@@ -170,10 +171,11 @@ Public serializers must never expose email. Author/user payloads use `PublicUser
 - Owners can manage billing and deactivate an organization. Admins can manage lower-ranked members and invitations.
 - Members/invitation seat counts include active members and pending invitations.
 - Organization owners cannot delete their account until ownership is transferred or the organization is removed/deactivated. The API returns HTTP 409 with code `organization_owner`.
-- Organization verification status is `unverified`, `pending`, `verified` or `rejected`. Only verified organizations can invite/link members, create student accounts, use domain auto-join or approve join requests. Existing memberships stay active during re-verification.
+- Organization verification status is `unverified`, `email_pending`, `pending_review`, `verified`, `rejected` or `suspended`. Submitting details moves an organization to `email_pending`; confirming the official email moves it to `pending_review`; only platform approval moves it to `verified`. “Request more information” keeps `pending_review` and sets an info-request flag. Only verified organizations can invite/link members, create student accounts, use domain auto-join or approve join requests. Existing memberships stay active during re-verification.
 - Creating an organization is restricted to the portal origin (`ORG_REGISTRATION_ALLOWED_ORIGINS`) and/or `X-Client-App: institutional`. This is a UX guard; authorization still comes from the authenticated user.
 - Only verified organizations appear in member-app join search and may receive join requests. A verified organization that changes its email domain drops back to `unverified` and must be reviewed again.
-- Platform staff review verification in Django admin and must record a note on rejection. Verification documents live in private storage and are available only to org admins and staff.
+- Official-email confirmation uses a single-use link (24-hour TTL) plus a six-digit code (15-minute TTL); resend has a 60-second cooldown and codes lock after five wrong attempts. Public confirmation endpoints bypass authentication. A domain mismatch is a reviewer flag, not a hard block.
+- Platform staff review verification in Django admin. Approval is blocked until the official email is confirmed; rejection and suspension require a note, and request-more-information keeps `pending_review`. Every transition writes verification and audit events. Verification documents live in private storage and are available only to org admins and staff; admin review can use a five-minute signed URL.
 
 ### Private messaging
 
@@ -278,7 +280,7 @@ Plan prices are seeded in migrations. `billing.PlanTier` rows override the fallb
 
 ### Analytics
 
-`src/lib/analytics.ts` loads Umami only when `VITE_UMAMI_SCRIPT_URL` and `VITE_UMAMI_WEBSITE_ID` are set; otherwise every call is a no-op. Pageviews are sent manually without query strings. Product events are coarse labels only (for example `organization_join_requested`). Never add message content, names, emails, search queries, document data, payment references or organization identifiers. See `docs/analytics.md`.
+`src/lib/analytics.ts` loads Umami only when `VITE_UMAMI_SCRIPT_URL` and `VITE_UMAMI_WEBSITE_ID` are set; otherwise every call is a no-op. Pageviews and events are sent manually with sanitized route paths and no query strings, page titles or referrers. Product events are coarse labels only (for example `organization_join_requested`). Never add message content, names, emails, search queries, document data, payment references or organization identifiers. See `docs/analytics.md`.
 
 ### Design system
 
@@ -313,7 +315,7 @@ The portal is a separate Vite app in `../curious-bright-institutional/apps/insti
 
 ## 13. Tests and validation
 
-Backend suite (currently 136 tests):
+Backend suite (currently 200 tests):
 
 ```bash
 cd apps/backend

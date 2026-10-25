@@ -40,9 +40,9 @@ Run `manage.py check` and `manage.py makemigrations --check --dry-run` before sh
 | `LIVEKIT_API_KEY` | video | — | LiveKit API key |
 | `LIVEKIT_API_SECRET` | video | — | Server-only LiveKit secret |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | no | `7200` | Video token lifetime |
-| `EMAIL_BACKEND` | no | console | Django backend for invitations, join requests and moderation mail |
+| `EMAIL_BACKEND` | no | console | Django backend for moderation approval mail |
 | `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` | no | — / 587 / — / — / true | SMTP credentials for `EMAIL_BACKEND` |
-| `EMAIL_PROVIDER` | prod yes | `console` in DEBUG, `resend` otherwise | Verification/password-reset delivery: `console`, `django` or `resend` |
+| `EMAIL_PROVIDER` | prod yes | `console` in DEBUG, `resend` otherwise | Account, organization and verification delivery: `console`, `django` or `resend` |
 | `RESEND_API_KEY` | with Resend | — | Server-only Resend API key; never expose to a frontend |
 | `RESEND_API_URL` | no | `https://api.resend.com/emails` | Resend API endpoint override |
 | `RESEND_TIMEOUT_SECONDS` / `RESEND_MAX_ATTEMPTS` / `RESEND_RETRY_BASE_SECONDS` | no | 10 / 3 / 1 | HTTPS timeout, attempt count and exponential backoff |
@@ -202,7 +202,7 @@ Roles are `owner > admin > moderator > teacher > student > member`. Owners manag
 
 Public sign-ups (member app and institutional admin self-signup) must verify their email. Student accounts created directly by an organization admin, including CSV imports, are trusted and marked verified automatically; they receive a temporary password instead of a verification code. Existing accounts were marked verified by migration when this feature shipped.
 
-Organization creation is restricted to `ORG_REGISTRATION_ALLOWED_ORIGINS` (and/or `X-Client-App: institutional`). Verification statuses are `unverified`, `pending`, `verified` and `rejected`. Only verified organizations can create students, invite/link members, join by domain or approve join requests; existing memberships stay active during re-verification. A verified organization that changes its domain returns to unverified. Verification documents use `PRIVATE_MEDIA_ROOT`, PDF/JPEG/PNG signature validation and a 10 MB limit. See [docs/verification.md](../../docs/verification.md).
+Organization creation is restricted to `ORG_REGISTRATION_ALLOWED_ORIGINS` (and/or `X-Client-App: institutional`). Verification statuses are `unverified`, `email_pending`, `pending_review`, `verified`, `rejected` and `suspended`. Submission moves an organization to `email_pending`; confirming the official email (single-use 24-hour link or 15-minute code) moves it to `pending_review`; approval is blocked until confirmation. Requesting more information keeps `pending_review` with an info-request flag; rejection and suspension require a note. Only verified organizations can create students, invite/link members, join by domain or approve join requests; existing memberships stay active during re-verification. A verified organization that changes its domain returns to unverified. Verification documents use `PRIVATE_MEDIA_ROOT`, PDF/JPEG/PNG signature validation and a 10 MB limit; admin review uses five-minute signed links. Every transition is audited. See [docs/verification.md](../../docs/verification.md).
 
 ### Private messaging
 
@@ -280,7 +280,7 @@ cd apps/backend
 .venv/bin/python manage.py test
 ```
 
-Current suite: **136 tests**. It covers the error contract, visibility, PII-safe serializers, comment tombstones, edit conflicts, soft delete/undo, rooms, LiveKit error paths, whiteboard persistence, WebSocket permissions, private messaging and conversation privacy, research revisions, organization roles/CSV/students, verification/join-request security, billing, viewer-accurate profile counts, and organization-owner deletion guards.
+Current suite: **200 tests**. It covers the error contract, visibility, PII-safe serializers, comment tombstones, edit conflicts, soft delete/undo, rooms, LiveKit error paths, video-session duration tracking, whiteboard persistence, WebSocket permissions, private messaging and conversation privacy, research revisions, organization roles/CSV/students, verification/join-request security, policy consent, staff analytics permissions, billing, viewer-accurate profile counts, and organization-owner deletion guards.
 
 ## Deployment (Northflank / Docker)
 

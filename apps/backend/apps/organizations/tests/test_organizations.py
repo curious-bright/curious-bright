@@ -47,7 +47,12 @@ class OrganizationAPITests(TestCase):
     def test_create_organization_makes_owner_membership(self):
         response = self.client.post(
             "/api/organizations/",
-            {"name": "Bright Academy", "domain": "bright.edu"},
+            {
+                "name": "Bright Academy",
+                "domain": "bright.edu",
+                "accept_terms": True,
+                "accept_privacy": True,
+            },
             format="json",
             HTTP_ORIGIN="http://localhost:5174",
         )

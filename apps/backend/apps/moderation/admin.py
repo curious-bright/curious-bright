@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from .models import ModeratorApplication, Report
 from .services import notify_application_decision
@@ -13,7 +14,7 @@ class ReportAdmin(admin.ModelAdmin):
     list_filter = ("is_resolved", "created_at")
     search_fields = ("reason", "post__title", "reporter__username")
     raw_id_fields = ("post", "reporter", "resolved_by")
-    readonly_fields = ("created_at",)
+    readonly_fields = ("created_at", "resolved_at")
 
     @admin.display(description="Post")
     def post_title(self, obj):
@@ -21,7 +22,11 @@ class ReportAdmin(admin.ModelAdmin):
 
     @admin.action(description="Mark selected reports resolved")
     def resolve_reports(self, request, queryset):
-        updated = queryset.update(is_resolved=True, resolved_by=request.user)
+        updated = queryset.filter(is_resolved=False).update(
+            is_resolved=True,
+            resolved_by=request.user,
+            resolved_at=timezone.now(),
+        )
         self.message_user(request, f"{updated} report(s) marked resolved.")
 
 

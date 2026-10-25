@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -122,7 +123,8 @@ class ResolveReportView(APIView):
         report = get_object_or_404(Report, pk=pk, is_resolved=False)
         report.is_resolved = True
         report.resolved_by = request.user
-        report.save(update_fields=["is_resolved", "resolved_by"])
+        report.resolved_at = timezone.now()
+        report.save(update_fields=["is_resolved", "resolved_by", "resolved_at"])
         return Response(ReportSerializer(report, context={"request": request}).data)
 
 

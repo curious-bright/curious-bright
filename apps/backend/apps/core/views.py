@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from apps.community.models import Post
 from apps.community.serializers import PostListSerializer
 from apps.community.visibility import visible_posts
+from apps.core.legal import current_versions
 from apps.rooms.models import Room
 from apps.rooms.serializers import RoomSerializer
 
@@ -26,6 +27,15 @@ def health(request):
     status = 200 if db_ok else 503
     return JsonResponse({"status": "ok" if db_ok else "degraded", "database": db_ok}, status=status)
 
+
+
+class LegalVersionsView(APIView):
+    """Public policy versions so clients can show the current documents."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(current_versions())
 
 
 class SearchView(APIView):

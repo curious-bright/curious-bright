@@ -4,11 +4,23 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
 
-from apps.core.views import SearchView, health
+from apps.core.admin_analytics import analytics_dashboard, analytics_export
+from apps.core.views import LegalVersionsView, SearchView, health
 
 urlpatterns = [
     path("", health, name="health"),
     path("healthz/", health, name="healthz"),
+    path("api/legal/versions/", LegalVersionsView.as_view(), name="legal_versions"),
+    path(
+        "admin/analytics/",
+        admin.site.admin_view(analytics_dashboard),
+        name="admin_analytics",
+    ),
+    path(
+        "admin/analytics/export/",
+        admin.site.admin_view(analytics_export),
+        name="admin_analytics_export",
+    ),
     path("admin/", admin.site.urls),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/", include("apps.community.urls")),

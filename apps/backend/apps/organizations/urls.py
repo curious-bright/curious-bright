@@ -16,9 +16,19 @@ urlpatterns = [
         name="org_search",
     ),
     path(
+        "organizations/verification/email/confirm-code/",
+        views.OrganizationVerificationCodeConfirmView.as_view(),
+        name="org_verification_code_confirm",
+    ),
+    path(
         "organizations/verification/email/<uuid:token>/",
         views.OrganizationVerificationEmailConfirmView.as_view(),
         name="org_verification_email_confirm",
+    ),
+    path(
+        "organizations/verification/document/signed/<str:token>/",
+        views.OrganizationVerificationDocumentSignedView.as_view(),
+        name="org_verification_document_signed",
     ),
     path(
         "organizations/join-requests/me/",
@@ -46,6 +56,11 @@ urlpatterns = [
         "organizations/<slug:slug>/verification/resend/",
         views.OrganizationVerificationResendView.as_view(),
         name="org_verification_resend",
+    ),
+    path(
+        "organizations/<slug:slug>/verification/official-email/",
+        views.OrganizationVerificationEmailChangeView.as_view(),
+        name="org_verification_email_change",
     ),
     path(
         "organizations/<slug:slug>/verification/document/",

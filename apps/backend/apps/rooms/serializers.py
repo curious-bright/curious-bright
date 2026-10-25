@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.accounts.serializers import PublicUserSerializer
 
 from .livekit import livekit_config
-from .models import Room, RoomMember, RoomMessage
+from .models import Room, RoomMember, RoomMessage, VideoSession
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -85,6 +85,16 @@ class RoomMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomMember
         fields = ["id", "user", "joined_at"]
+
+
+class VideoSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VideoSession
+        fields = [
+            "id", "room", "joined_at", "last_heartbeat_at", "left_at",
+            "duration_seconds",
+        ]
+        read_only_fields = fields
 
 
 class RoomMessageSerializer(serializers.ModelSerializer):

@@ -178,7 +178,7 @@ The webhook verifies the HMAC-SHA512 signature and is idempotent. USD checkout a
 ## Tests and builds
 
 ```bash
-# Backend (136 tests)
+# Backend (200 tests)
 cd apps/backend
 .venv/bin/python manage.py test
 
@@ -211,7 +211,7 @@ Required secrets/services:
 - `PAYSTACK_*` when billing is enabled; callback to the portal `/billing/verify`
 - `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified
   `curiousbright.com.ng` domain for verification/password-reset mail
-- SMTP settings for invitation, join-request and moderation email
+- SMTP settings for moderation email; organization invitations and join requests use the Resend dispatcher
 - `PRIVATE_MEDIA_ROOT` on a persistent **private** volume
 - `APP_FRONTEND_URL`, `ORG_FRONTEND_URL`, `LANDING_FRONTEND_URL`,
   `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS`

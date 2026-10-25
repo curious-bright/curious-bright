@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/api';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
 import { useAuth } from '../state/AuthContext';
+import { track } from '../lib/analytics';
 
 const ACADEMIC_LEVELS = [
   { value: 'high_school', label: 'High School & Secondary' },
@@ -76,6 +77,7 @@ export default function Submit() {
 
     if (!created) return; // apiFetch already surfaced the error globally
 
+    track('post_created', { kind: 'resource', subject, visibility: 'public' });
     setSuccess('Your paper was submitted to the community peer review queue!');
     setTimeout(() => navigate('/browse'), 2000);
   };

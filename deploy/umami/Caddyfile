@@ -1,0 +1,14 @@
+# Optional public-origin reverse proxy. Prefer Cloudflare Tunnel where possible.
+# Cloudflare SSL/TLS mode must be Full (strict) when Cloudflare is in front.
+{$UMAMI_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy umami:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}

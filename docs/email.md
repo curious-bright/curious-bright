@@ -5,8 +5,9 @@ through [Resend](https://resend.com) over its HTTPS API. The backend renders
 branded HTML plus a plain-text fallback, stores only hashes of codes/tokens, and
 never logs a code, reset token or API key.
 
-Existing invitation, join-request and moderation mail still uses Django's
-`EMAIL_BACKEND`. The new flows use `EMAIL_PROVIDER`:
+Organization invitations, join requests and verification/decision mail use the
+same Resend dispatcher as registration email. Moderation approval mail still
+uses Django's `EMAIL_BACKEND`. The transactional flows use `EMAIL_PROVIDER`:
 
 | `EMAIL_PROVIDER` | Behaviour | Use |
 |---|---|---|

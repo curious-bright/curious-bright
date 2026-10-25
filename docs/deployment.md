@@ -22,8 +22,8 @@ portal ───── REST + WebSockets ────────┘
                                           ├─ Redis (Channels)
                                           ├─ LiveKit (video)
                                           ├─ Paystack (billing)
-                                          ├─ Resend (verification/reset)
-                                          └─ SMTP (invitations/moderation)
+                                          ├─ Resend (verification/reset/org mail)
+                                          └─ SMTP (moderation approval only)
 ```
 
 The backend is authoritative for verification, roles, visibility, billing and
@@ -39,9 +39,10 @@ private messaging. A hidden button is never the security boundary.
 - A persistent volume for `apps/backend/media` (avatars, PDFs, logos) and a
   **separate private persistent volume** for `PRIVATE_MEDIA_ROOT`
   (verification documents).
-- A verified Resend domain for registration-verification, password-reset and
-  password-changed emails. SMTP remains for invitations, join-request and
-  billing mail that still uses Django's `EMAIL_BACKEND`.
+- A verified Resend domain for registration verification, password reset,
+  password-changed notices and organization verification/invitation/join-request
+  email. SMTP remains only for moderation approval mail that still uses Django's
+  `EMAIL_BACKEND`.
 - A reverse proxy/load balancer that forwards WebSocket upgrades to the ASGI
   server.
 - Uvicorn with WebSocket support (`uvicorn[standard]` in `requirements.txt`).
@@ -135,9 +136,10 @@ enabled on the Paystack account.
 
 ### 2.5 Email / Resend
 
-Registration verification, password reset and password-changed notices go
-through Resend's HTTPS API. Invitations, join requests and moderation mail still
-use Django's SMTP backend.
+Registration verification, password reset, password-changed notices and
+organization verification/invitation/join-request email go through Resend's
+HTTPS API. Moderation approval mail still uses Django's `EMAIL_BACKEND`; keep
+that configured if moderation email is enabled.
 
 ```dotenv
 EMAIL_PROVIDER=resend
@@ -162,7 +164,7 @@ PASSWORD_RESET_COOLDOWN_SECONDS=60
 PASSWORD_RESET_EMAIL_HOURLY_LIMIT=5
 PASSWORD_RESET_IP_HOURLY_LIMIT=10
 
-# Existing invitation / moderation mail
+# Moderation approval mail still uses Django's mail backend.
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.your-provider.com
 EMAIL_PORT=587
@@ -324,7 +326,7 @@ See [`docs/verification.md`](verification.md). Minimum production requirements:
 
 - Resend domain verified and SPF/DKIM/DMARC passing for
   `noreply@curiousbright.com.ng`; see [email.md](email.md).
-- SMTP working for invitation/moderation mail, if enabled.
+- SMTP working for moderation mail, if enabled.
 - `PRIVATE_MEDIA_ROOT` on a private persistent volume.
 - `ORG_REGISTRATION_ALLOWED_ORIGINS` includes the portal.
 - Platform staff know the review workflow in Django admin.

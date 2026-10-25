@@ -8,6 +8,7 @@ import {
   getRefreshToken,
   setTokens,
 } from '../lib/api';
+import { track } from '../lib/analytics';
 
 export interface BadgeInfo {
   code: string;
@@ -15,6 +16,19 @@ export interface BadgeInfo {
   description: string;
   icon: string;
   awarded_at?: string;
+}
+
+export interface PolicyConsentState {
+  version: string;
+  accepted_version: string | null;
+  accepted_at: string | null;
+  accepted: boolean;
+}
+
+export interface ConsentState {
+  terms: PolicyConsentState;
+  privacy: PolicyConsentState;
+  last_updated: string;
 }
 
 export interface Me {
@@ -42,6 +56,7 @@ export interface Me {
   is_email_verified: boolean;
   can_moderate: boolean;
   must_change_password: boolean;
+  consent: ConsentState;
 }
 
 export interface RegisterResult {
@@ -75,8 +90,15 @@ interface AuthContextValue {
   loading: boolean;
   isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<Me>;
-  register: (username: string, email: string, password: string) => Promise<RegisterResult>;
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    acceptTerms: boolean,
+    acceptPrivacy: boolean,
+  ) => Promise<RegisterResult>;
   verifyEmail: (email: string, code: string) => Promise<Me>;
+  acceptPolicies: (acceptTerms: boolean, acceptPrivacy: boolean) => Promise<ConsentState>;
   logout: () => Promise<void>;
   refreshMe: (force?: boolean) => Promise<void>;
   updateProfile: (patch: ProfilePatch, avatarFile?: File | null) => Promise<boolean>;
@@ -169,11 +191,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (username: string, email: string, password: string): Promise<RegisterResult> => {
-      return apiFetchStrict<RegisterResult>('/auth/register/', {
+    async (
+      username: string,
+      email: string,
+      password: string,
+      acceptTerms: boolean,
+      acceptPrivacy: boolean,
+    ): Promise<RegisterResult> => {
+      const result = await apiFetchStrict<RegisterResult>('/auth/register/', {
         method: 'POST',
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          accept_terms: acceptTerms,
+          accept_privacy: acceptPrivacy,
+        }),
       });
+      track('sign_up', { method: 'password' });
+      return result;
     },
     [],
   );
@@ -191,8 +227,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'user',
         JSON.stringify({ id: data.user.id, name: data.user.username, email: data.user.email }),
       );
+      track('email_verified', { method: 'email_code' });
       broadcastAuthChange();
       return data.user;
+    },
+    [broadcastAuthChange],
+  );
+
+  const acceptPolicies = useCallback(
+    async (acceptTerms: boolean, acceptPrivacy: boolean): Promise<ConsentState> => {
+      const data = await apiFetchStrict<{ consent: ConsentState }>('/auth/consent/', {
+        method: 'POST',
+        body: JSON.stringify({
+          accept_terms: acceptTerms,
+          accept_privacy: acceptPrivacy,
+        }),
+      });
+      setUser((current) => (current ? { ...current, consent: data.consent } : current));
+      broadcastAuthChange();
+      return data.consent;
     },
     [broadcastAuthChange],
   );
@@ -252,12 +305,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       verifyEmail,
+      acceptPolicies,
       logout,
       refreshMe,
       updateProfile,
       changePassword,
     }),
-    [user, loading, login, register, verifyEmail, logout, refreshMe, updateProfile, changePassword],
+    [
+      user,
+      loading,
+      login,
+      register,
+      verifyEmail,
+      acceptPolicies,
+      logout,
+      refreshMe,
+      updateProfile,
+      changePassword,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

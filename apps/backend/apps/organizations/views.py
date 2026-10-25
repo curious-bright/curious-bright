@@ -15,6 +15,7 @@ from rest_framework import generics, status
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from urllib.parse import urlparse
 import uuid
@@ -22,6 +23,7 @@ import uuid
 from apps.accounts.models import Profile
 from apps.community.models import Notification
 from apps.community.notifications import notify
+from apps.core.legal import record_consent
 
 from .models import (
     Organization,
@@ -50,15 +52,25 @@ from .serializers import (
     invite_expiry,
 )
 from .services import (
+    VerificationError,
     approve_verification,
     audit,
     can_manage,
+    change_official_email,
+    confirm_official_email_by_code,
+    confirm_official_email_by_token,
+    issue_official_email_challenge,
+    load_signed_document,
     reject_verification,
+    request_more_information,
+    resend_confirmation,
     role_rank,
+    send_admin_pending_review_email,
     send_invitation_email,
     send_join_decision_email,
     send_join_request_email,
-    send_verification_confirmation_email,
+    signed_document_url,
+    verification_can_submit,
     verification_event,
 )
 
@@ -184,10 +196,19 @@ class OrganizationListCreateView(generics.ListCreateAPIView):
             )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        accept_terms = serializer.validated_data.get("accept_terms", False)
+        accept_privacy = serializer.validated_data.get("accept_privacy", False)
         org = serializer.save(
             owner=request.user,
             plan_tier=Organization.Plan.FREE,
             seat_limit=50,
+        )
+        record_consent(
+            request.user,
+            organization=org,
+            request=request,
+            accept_terms=accept_terms,
+            accept_privacy=accept_privacy,
         )
         OrganizationMembership.objects.create(
             organization=org,
@@ -236,7 +257,7 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
             verification_event(
                 org,
-                OrganizationVerificationEvent.Action.REJECTED,
+                OrganizationVerificationEvent.Action.DOMAIN_CHANGED,
                 self.request.user,
                 "The email domain changed; verification must be renewed.",
             )
@@ -995,10 +1016,38 @@ class OrganizationSearchView(APIView):
         )
 
 
+def _verification_response(verification, request):
+    data = OrganizationVerificationSerializer(
+        verification, context={"request": request}
+    ).data
+    org = verification.organization
+    data["organization_status"] = org.verification_status
+    data["can_submit"] = verification_can_submit(org)
+    data["info_requested"] = bool(verification.info_requested_at)
+    data["resend_after"] = getattr(
+        settings, "ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+    )
+    data["document_signed_url"] = (
+        signed_document_url(verification, request)
+        if request.user.is_staff
+        else None
+    )
+    return data
+
+
+def _verification_error(exc):
+    return Response(
+        {"code": exc.code, "message": exc.message},
+        status=exc.status,
+    )
+
+
 class OrganizationVerificationView(APIView):
     """Read or submit the current organization verification application."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "org_verification"
 
     def get(self, request, slug):
         org = _org(slug)
@@ -1008,33 +1057,25 @@ class OrganizationVerificationView(APIView):
             return Response(
                 {
                     "status": org.verification_status,
+                    "organization_status": org.verification_status,
                     "verification": None,
-                    "can_submit": org.verification_status
-                    in (Organization.VerificationStatus.UNVERIFIED, Organization.VerificationStatus.REJECTED),
+                    "can_submit": verification_can_submit(org),
+                    "info_requested": False,
+                    "resend_after": getattr(
+                        settings, "ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                    ),
                 }
             )
-        data = OrganizationVerificationSerializer(
-            verification, context={"request": request}
-        ).data
-        data["can_submit"] = org.verification_status in (
-            Organization.VerificationStatus.UNVERIFIED,
-            Organization.VerificationStatus.REJECTED,
-        )
-        return Response(data)
+        return Response(_verification_response(verification, request))
 
     def post(self, request, slug):
         org = _org(slug)
         _require_admin(request, org)
-        if org.verification_status == Organization.VerificationStatus.VERIFIED:
-            return Response(
-                {"code": "already_verified", "message": "This organization is already verified."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if org.verification_status == Organization.VerificationStatus.PENDING:
+        if not verification_can_submit(org):
             return Response(
                 {
-                    "code": "verification_pending",
-                    "message": "A verification request is already being reviewed.",
+                    "code": "verification_not_submittable",
+                    "message": "This verification cannot be submitted in its current status.",
                 },
                 status=status.HTTP_409_CONFLICT,
             )
@@ -1042,141 +1083,226 @@ class OrganizationVerificationView(APIView):
         serializer = VerificationSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
+
+        # One official email may only be attached to one verification request.
+        # Otherwise the public code-confirmation endpoint could not identify the
+        # organization unambiguously.
+        if (
+            OrganizationVerification.objects.filter(
+                official_email__iexact=values["official_email"]
+            )
+            .exclude(organization=org)
+            .exists()
+        ):
+            return Response(
+                {
+                    "code": "email_in_use",
+                    "message": "That official email is already attached to another verification request.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         now = timezone.now()
 
-        verification, created = OrganizationVerification.objects.get_or_create(
-            organization=org,
-            defaults={
-                "legal_name": values["legal_name"],
-                "org_type": values["org_type"],
-                "country": values["country"],
-                "address": values["address"],
-                "website": values["website"],
-                "official_email": values["official_email"],
-                "contact_name": values["contact_name"],
-                "contact_role": values["contact_role"],
-                "contact_email": values["contact_email"],
-                "contact_phone": values.get("contact_phone", ""),
-                "registration_number": values.get("registration_number", ""),
-                "registration_document": values.get("registration_document"),
-                "is_government_funded": values.get("is_government_funded", False),
-                "head_of_institution": values.get("head_of_institution", ""),
-                "submitted_at": now,
-                "attempt": 1,
-            },
-        )
+        verification = OrganizationVerification.objects.filter(organization=org).first()
+        created = verification is None
+        email_changed = False
+        if created:
+            verification = OrganizationVerification(organization=org)
 
-        if not created:
-            email_changed = (
-                verification.official_email.lower() != values["official_email"].lower()
-            )
-            for field in (
-                "legal_name",
-                "org_type",
+        email_changed = (
+            bool(verification.official_email)
+            and verification.official_email.lower() != values["official_email"].lower()
+        )
+        for field in (
+            "legal_name",
+            "org_type",
+            "country",
+            "address",
+            "website",
+            "official_email",
+            "contact_name",
+            "contact_role",
+            "contact_email",
+            "contact_phone",
+            "registration_number",
+            "is_government_funded",
+            "head_role",
+            "head_email",
+        ):
+            setattr(verification, field, values.get(field, ""))
+        verification.head_of_institution = values.get("head_name", "")
+        verification.official_email_domain_matches = values.get(
+            "official_email_domain_matches", True
+        )
+        if values.get("registration_document") is not None:
+            verification.registration_document = values["registration_document"]
+        if email_changed or verification.official_email_verified_at is None:
+            verification.official_email_verified_at = None
+            verification.official_email_token = uuid.uuid4()
+            verification.official_email_token_expires_at = None
+        verification.submitted_at = now
+        verification.reviewed_at = None
+        verification.reviewed_by = None
+        verification.rejection_reason = ""
+        verification.info_requested_at = None
+        verification.info_request_note = ""
+        verification.attempt = (verification.attempt or 0) + 1
+        verification.save()
+
+        org.country = values["country"]
+        org.suspension_reason = ""
+        if verification.official_email_verified_at is None:
+            org.verification_status = Organization.VerificationStatus.EMAIL_PENDING
+            org.verified_at = None
+        else:
+            org.verification_status = Organization.VerificationStatus.PENDING_REVIEW
+            org.verified_at = None
+        org.save(
+            update_fields=[
                 "country",
-                "address",
-                "website",
-                "official_email",
-                "contact_name",
-                "contact_role",
-                "contact_email",
-                "contact_phone",
-                "registration_number",
-                "is_government_funded",
-                "head_of_institution",
-            ):
-                setattr(verification, field, values.get(field, ""))
-            if values.get("registration_document") is not None:
-                verification.registration_document = values["registration_document"]
-            if email_changed:
-                verification.official_email_verified_at = None
-                verification.official_email_token = uuid.uuid4()
-            verification.submitted_at = now
-            verification.reviewed_at = None
-            verification.reviewed_by = None
-            verification.rejection_reason = ""
-            verification.attempt += 1
-            verification.save()
-
-        org.verification_status = Organization.VerificationStatus.PENDING
-        org.verified_at = None
-        org.save(update_fields=["verification_status", "verified_at", "updated_at"])
-
-        event_action = (
-            OrganizationVerificationEvent.Action.SUBMITTED
-            if created
-            else OrganizationVerificationEvent.Action.RESUBMITTED
+                "verification_status",
+                "verified_at",
+                "suspension_reason",
+                "updated_at",
+            ]
         )
-        verification_event(
-            org,
-            event_action,
-            request.user,
-            attempt=verification.attempt,
-        )
-        send_verification_confirmation_email(verification)
 
-        data = OrganizationVerificationSerializer(
-            verification, context={"request": request}
-        ).data
-        data["can_submit"] = False
-        return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        if created:
+            verification_event(
+                org,
+                OrganizationVerificationEvent.Action.SUBMITTED,
+                request.user,
+                attempt=verification.attempt,
+            )
+        else:
+            verification_event(
+                org,
+                OrganizationVerificationEvent.Action.RESUBMITTED,
+                request.user,
+                attempt=verification.attempt,
+                email_changed=email_changed,
+            )
+
+        sent = None
+        if verification.official_email_verified_at is None:
+            _code, sent = issue_official_email_challenge(verification)
+        else:
+            send_admin_pending_review_email(verification)
+
+        data = _verification_response(verification, request)
+        data["email_sent"] = sent
+        return Response(
+            data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class OrganizationVerificationResendView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "org_verification_resend"
 
     def post(self, request, slug):
         org = _org(slug)
         _require_admin(request, org)
         verification = get_object_or_404(OrganizationVerification, organization=org)
-        if verification.official_email_verified_at is not None:
-            return Response(
-                {"code": "already_confirmed", "message": "The official email is already confirmed."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if verification.official_email_token is None:
-            verification.official_email_token = uuid.uuid4()
-            verification.save(update_fields=["official_email_token", "updated_at"])
-        sent = send_verification_confirmation_email(verification)
-        verification_event(
-            org,
-            OrganizationVerificationEvent.Action.EMAIL_RESENT,
-            request.user,
-            sent=sent,
+        try:
+            sent = resend_confirmation(verification, actor=request.user)
+        except VerificationError as exc:
+            return _verification_error(exc)
+        return Response(
+            {
+                "sent": sent,
+                "resend_after": getattr(
+                    settings, "ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                ),
+            }
         )
-        return Response({"sent": sent})
 
 
 class OrganizationVerificationEmailConfirmView(APIView):
-    """Confirm an official email from the signed link sent by the portal."""
+    """Confirm an official email from the single-use link sent by the portal."""
 
     permission_classes = []
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "org_verification_code"
 
     def post(self, request, token):
-        verification = get_object_or_404(
-            OrganizationVerification.objects.select_related("organization"),
-            official_email_token=token,
-        )
-        if verification.official_email_verified_at is None:
-            verification.official_email_verified_at = timezone.now()
-            verification.official_email_token = uuid.uuid4()
-            verification.save(
-                update_fields=[
-                    "official_email_verified_at",
-                    "official_email_token",
-                    "updated_at",
-                ]
-            )
-            verification_event(
-                verification.organization,
-                OrganizationVerificationEvent.Action.EMAIL_CONFIRMED,
-                request.user if request.user.is_authenticated else None,
-            )
+        try:
+            verification = confirm_official_email_by_token(token)
+        except VerificationError as exc:
+            return _verification_error(exc)
         return Response(
             {
                 "confirmed": True,
                 "organization": verification.organization.name,
                 "official_email": verification.official_email,
+                "status": verification.organization.verification_status,
+            }
+        )
+
+
+class OrganizationVerificationCodeConfirmView(APIView):
+    """Six-digit fallback when the email link is unavailable or expired."""
+
+    permission_classes = []
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "org_verification_code"
+
+    def post(self, request):
+        official_email = (request.data.get("official_email") or "").strip()
+        code = (request.data.get("code") or "").strip()
+        if not official_email or not code:
+            return Response(
+                {
+                    "code": "validation_error",
+                    "message": "Enter the official email and the six-digit code.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            verification = confirm_official_email_by_code(official_email, code)
+        except VerificationError as exc:
+            return _verification_error(exc)
+        return Response(
+            {
+                "confirmed": True,
+                "organization": verification.organization.name,
+                "official_email": verification.official_email,
+                "status": verification.organization.verification_status,
+            }
+        )
+
+
+class OrganizationVerificationEmailChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "org_verification_resend"
+
+    def post(self, request, slug):
+        org = _org(slug)
+        _require_admin(request, org)
+        verification = get_object_or_404(OrganizationVerification, organization=org)
+        new_email = (request.data.get("official_email") or "").strip()
+        if not new_email:
+            return Response(
+                {"code": "validation_error", "message": "Enter the new official email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            sent = change_official_email(verification, new_email, actor=request.user)
+        except VerificationError as exc:
+            return _verification_error(exc)
+        return Response(
+            {
+                "sent": sent,
+                "status": verification.organization.verification_status,
+                "resend_after": getattr(
+                    settings, "ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
+                ),
             }
         )
 
@@ -1203,6 +1329,30 @@ class OrganizationVerificationDocumentView(APIView):
         )
         response["X-Content-Type-Options"] = "nosniff"
         response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class OrganizationVerificationDocumentSignedView(APIView):
+    """Short-lived signed URL used by the admin review screen."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request, token):
+        try:
+            verification = load_signed_document(token)
+        except VerificationError as exc:
+            return _verification_error(exc)
+        document = verification.registration_document
+        file_handle = document.open("rb")
+        response = FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=document.name.rsplit("/", 1)[-1],
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-store"
+        response["Referrer-Policy"] = "no-referrer"
         return response
 
 

@@ -43,10 +43,10 @@ class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = [
-            "id", "name", "slug", "domain", "logo_url", "owner",
+            "id", "name", "slug", "domain", "country", "logo_url", "owner",
             "org_type", "plan_tier", "subscription_status", "seat_limit", "seats_used",
             "seats_remaining", "auto_join_domain", "allow_join_requests",
-            "verification_status", "verified_at", "member_count",
+            "verification_status", "verified_at", "suspension_reason", "member_count",
             "my_role", "is_active", "created_at",
         ]
 
@@ -86,7 +86,7 @@ class OrganizationSearchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = [
-            "id", "name", "slug", "org_type", "domain", "logo_url",
+            "id", "name", "slug", "org_type", "country", "domain", "logo_url",
             "member_count", "verification_status", "allow_join_requests",
             "my_membership_role", "my_join_request_status",
         ]
@@ -134,6 +134,8 @@ class OrganizationVerificationSerializer(serializers.ModelSerializer):
     status = serializers.CharField(source="organization.verification_status", read_only=True)
     organization_slug = serializers.CharField(source="organization.slug", read_only=True)
     official_email_verified = serializers.BooleanField(read_only=True)
+    official_email_domain_matches = serializers.BooleanField(read_only=True)
+    head_name = serializers.CharField(source="head_of_institution", required=False, allow_blank=True)
     document_url = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
     registration_document = serializers.FileField(
@@ -145,16 +147,19 @@ class OrganizationVerificationSerializer(serializers.ModelSerializer):
         fields = [
             "id", "organization_slug", "status", "legal_name", "org_type",
             "country", "address", "website", "official_email",
-            "official_email_verified", "contact_name", "contact_role",
-            "contact_email", "contact_phone", "registration_number",
-            "registration_document", "document_url", "is_government_funded",
-            "head_of_institution", "submitted_at", "reviewed_at",
-            "rejection_reason", "attempt", "events", "created_at", "updated_at",
-        ]
-        read_only_fields = [
-            "id", "status", "official_email_verified", "submitted_at",
+            "official_email_verified", "official_email_domain_matches",
+            "contact_name", "contact_role", "contact_email", "contact_phone",
+            "registration_number", "registration_document", "document_url",
+            "is_government_funded", "head_name", "head_role", "head_email",
+            "info_requested_at", "info_request_note", "submitted_at",
             "reviewed_at", "rejection_reason", "attempt", "events",
             "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "status", "official_email_verified",
+            "official_email_domain_matches", "info_requested_at",
+            "info_request_note", "submitted_at", "reviewed_at",
+            "rejection_reason", "attempt", "events", "created_at", "updated_at",
         ]
 
     def get_document_url(self, obj):
@@ -190,7 +195,12 @@ class VerificationSubmitSerializer(serializers.Serializer):
     registration_number = serializers.CharField(max_length=120, required=False, allow_blank=True)
     registration_document = serializers.FileField(required=False, allow_null=True)
     is_government_funded = serializers.BooleanField(default=False)
-    head_of_institution = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    head_name = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    head_role = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    head_email = serializers.EmailField(required=False, allow_blank=True)
+    head_of_institution = serializers.CharField(
+        max_length=160, required=False, allow_blank=True, write_only=True
+    )
 
     def validate_website(self, value):
         value = (value or "").strip()
@@ -209,15 +219,13 @@ class VerificationSubmitSerializer(serializers.Serializer):
         return validate_verification_document(value)
 
     def validate(self, attrs):
-        if not domains_match(attrs["website"], attrs["official_email"]):
-            raise serializers.ValidationError(
-                {
-                    "official_email": (
-                        "Use an official email address on the same domain as the "
-                        "organization website."
-                    )
-                }
-            )
+        # A domain mismatch is a review flag, not a hard block: some
+        # institutions legitimately use a separate official mail domain.
+        attrs["official_email_domain_matches"] = domains_match(
+            attrs["website"], attrs["official_email"]
+        )
+        head_name = (attrs.get("head_name") or attrs.get("head_of_institution") or "").strip()
+        attrs["head_name"] = head_name
         if attrs.get("org_type") == Organization.OrgType.UNIVERSITY and attrs.get(
             "is_government_funded"
         ):
@@ -230,11 +238,27 @@ class VerificationSubmitSerializer(serializers.Serializer):
                         )
                     }
                 )
-            if not attrs.get("head_of_institution"):
+            if not head_name:
                 raise serializers.ValidationError(
                     {
-                        "head_of_institution": (
+                        "head_name": (
                             "Add the Vice-Chancellor or Dean responsible for this institution."
+                        )
+                    }
+                )
+            if not attrs.get("head_role"):
+                raise serializers.ValidationError(
+                    {
+                        "head_role": (
+                            "Add the role of the Vice-Chancellor, Rector or Dean."
+                        )
+                    }
+                )
+            if not attrs.get("head_email"):
+                raise serializers.ValidationError(
+                    {
+                        "head_email": (
+                            "Add the official email address for the Vice-Chancellor or Dean."
                         )
                     }
                 )
@@ -265,9 +289,12 @@ class OrganizationJoinRequestSerializer(serializers.ModelSerializer):
 
 
 class OrganizationCreateSerializer(serializers.ModelSerializer):
+    accept_terms = serializers.BooleanField(write_only=True)
+    accept_privacy = serializers.BooleanField(write_only=True)
+
     class Meta:
         model = Organization
-        fields = ["name", "domain", "org_type"]
+        fields = ["name", "domain", "org_type", "accept_terms", "accept_privacy"]
 
     def validate_domain(self, value):
         value = (value or "").strip().lower().lstrip("@")
@@ -279,11 +306,30 @@ class OrganizationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That domain is already registered.")
         return value
 
+    def validate(self, attrs):
+        if not attrs.get("accept_terms") or not attrs.get("accept_privacy"):
+            raise serializers.ValidationError(
+                {
+                    "accept_terms": (
+                        "You must accept the Terms of Use and Privacy Policy to create an organization."
+                    )
+                }
+            )
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop("accept_terms", None)
+        validated_data.pop("accept_privacy", None)
+        return super().create(validated_data)
+
 
 class OrganizationUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["name", "domain", "logo", "auto_join_domain", "allow_join_requests", "org_type"]
+        fields = [
+            "name", "domain", "country", "logo", "auto_join_domain",
+            "allow_join_requests", "org_type",
+        ]
 
     def validate_domain(self, value):
         value = (value or "").strip().lower().lstrip("@") or None

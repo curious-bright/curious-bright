@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useRealtime } from '../lib/realtime';
+import { track } from '../lib/analytics';
 import { useAuth } from './AuthContext';
 
 export interface ChatUser {
@@ -100,6 +101,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ username, message: message || '' }),
       });
       if (!data?.id) return null;
+      track('chat_started', { has_first_message: Boolean(message?.trim()) });
       await refresh();
       return data.id;
     },

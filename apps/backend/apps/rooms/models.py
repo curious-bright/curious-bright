@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models import SoftDeleteModel
 
@@ -48,6 +49,39 @@ class RoomMember(models.Model):
 
     def __str__(self):
         return f"{self.user.username} in {self.room.name}"
+
+
+class VideoSession(models.Model):
+    """Aggregate-only record of time spent in a room's video call.
+
+    No media, chat, or participant content is stored. Clients start a session
+    when they join the LiveKit room, send a heartbeat while connected, and end
+    it when they leave. The analytics dashboard sums ``duration_seconds``.
+    """
+
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name="video_sessions"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="video_sessions",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_heartbeat_at = models.DateTimeField(default=timezone.now)
+    left_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-joined_at"]
+        indexes = [
+            models.Index(fields=["room", "joined_at"]),
+            models.Index(fields=["user", "joined_at"]),
+            models.Index(fields=["left_at", "last_heartbeat_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} in room {self.room_id} ({self.duration_seconds}s)"
 
 
 class RoomMessage(models.Model):

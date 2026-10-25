@@ -5,15 +5,17 @@ recommendation, and explains how analytics is wired into the three browser
 surfaces while keeping learner and organization data out of the analytics
 pipeline.
 
-> **Status:** Umami is implemented behind environment variables but no analytics
-> host or website ID has been provisioned yet. Analytics is completely disabled
-> while `VITE_UMAMI_*` variables are empty. Production SMTP also needs to be
+> **Status:** Umami is implemented behind environment variables and the
+> self-hosted deployment assets are in `deploy/umami/`. No analytics host or
+> website ID has been provisioned yet. Analytics is completely disabled while
+> `VITE_UMAMI_*` variables are empty. Production Resend/SMTP also needs to be
 > confirmed before email-driven verification is considered fully live.
 
 ## 1. Recommendation
 
-**Use self-hosted Umami (v3.x) for launch.** Revisit Matomo or PostHog only when
-the product needs a capability Umami cannot provide.
+**Use self-hosted Umami (v3.2+) for launch.** Revisit Matomo or PostHog only when
+the product needs a capability Umami cannot provide. The manual pageview mode
+uses `data-auto-pageview="false"`, added in Umami v3.2.0.
 
 Why Umami fits Curious Bright:
 
@@ -51,11 +53,14 @@ Never send any of the following to analytics:
 - organization legal names, verification documents or reviewer notes;
 - search queries, post content, comments or uploaded document names;
 - payment references, card details, Paystack payloads or invoice data;
-- passwords, tokens, session identifiers or raw IP addresses.
+- passwords, tokens, session identifiers or raw IP addresses as event properties.
 
-The client integrations only send route paths and coarse product events. A path
-can still contain a slug or ID on some routes; routes used by the trackers are
-static app paths. Do not add per-user dimensions without a privacy review.
+The client integrations only send route paths and coarse product events. Page
+titles and referrers are replaced with safe values. A path can still contain a
+slug or ID on some routes; routes used by the trackers are static app paths. Do
+not add per-user dimensions without a privacy review. Umami processes the
+request IP transiently to derive a rotating, salted anonymous session identifier
+and approximate location; raw IP addresses are not stored as analytics fields.
 
 ## 2. Comparison
 
@@ -106,6 +111,12 @@ of writing (2026). Hosting prices change; verify them before purchase.
 | Event | Properties | Purpose |
 |---|---|---|
 | `pageview` | static `path` | Route-level usage |
+| `sign_up` | `method` | Registration completion |
+| `email_verified` | `method` | Email-verification completion |
+| `post_created` | `kind`, `visibility` (and optional subject category) | Publishing/upload funnel |
+| `follow` | `source` | Social graph growth |
+| `chat_started` | `has_first_message` | Messaging activation |
+| `payment_success` | `plan` | Paid conversion |
 | `organization_join_requested` | none | Completion of the join-request flow |
 
 ### Institutional portal (`../curious-bright-institutional`)
@@ -114,111 +125,54 @@ of writing (2026). Hosting prices change; verify them before purchase.
 |---|---|---|
 | `pageview` | static `path` | Portal entry pages |
 | `portal_view` | `section` (`overview`, `members`, `billing`, …) | Which admin surface is used |
-| `organization_created` | `org_type` | Onboarding completion |
+| `sign_up` | `method`, `portal` | Institutional owner registration |
+| `email_verified` | `method` | Account email verification |
+| `org_registered` | `org_type` | Onboarding completion |
 | `verification_submitted` | `org_type`, `resubmission` | Verification funnel |
 | `verification_email_resent` | none | Email-delivery friction |
+| `verification_email_changed` | none | Official-email correction |
+| `org_email_verified` | `method` (`link` or `code`) | Official-email confirmation |
+| `org_approved` | `org_type` | Verified-organization outcome |
 | `join_request_decision` | `decision` | Join-flow usage |
 | `plan_checkout_started` | `plan`, `interval`, `currency` | Billing conversion |
+| `payment_success` | `plan`, `portal` | Paid conversion |
 
 All trackers are no-ops when `VITE_UMAMI_SCRIPT_URL` or
-`VITE_UMAMI_WEBSITE_ID` is missing. Pageviews are sent manually with query
-strings removed. No `identify()` call is made, no cookies are required, and no
-session replay is enabled.
+`VITE_UMAMI_WEBSITE_ID` is missing, and when Do Not Track or Global Privacy
+Control is enabled. Pageviews are sent manually with query strings and hashes
+removed; dynamic route segments (post IDs, usernames, invitation and email
+tokens) are replaced with placeholders. Pageviews and events replace the page
+title with that safe route path and blank the referrer, so dynamic page titles
+and external search queries never reach Umami. No `identify()` call is made, no cookies are
+required, and no session replay is enabled. Empty-environment no-op tests live
+in `apps/web/scripts/` and
+`../curious-bright-institutional/apps/institutional-web/scripts/`.
 
 ## 4. Self-hosting Umami
 
-### 4.1 DNS and server
+The production deployment files are in [`deploy/umami/`](../deploy/umami/):
+Docker Compose, a separate PostgreSQL database, Cloudflare Tunnel/Caddy
+options, backup/restore scripts and an operations checklist. Follow that README
+rather than copying a Compose file from this document.
 
-Use a dedicated hostname such as `analytics.curiousbright.com.ng`. A small
-Linux VPS with 1–2 vCPU and 1–2 GB RAM is sufficient for launch traffic. Keep
-PostgreSQL on the same private network or use a managed database.
+Summary:
 
-### 4.2 Docker Compose
+- Hostname: `analytics.curiousbright.com.ng`.
+- Umami binds to `127.0.0.1:3000` only; PostgreSQL has no published port.
+- Put Cloudflare Tunnel (recommended) or Caddy in front for HTTPS.
+- Use a separate Umami PostgreSQL database and volume; never point Umami at the
+  Django database.
+- Set `DISABLE_TELEMETRY=1`, keep automatic tracking off in the clients, and
+  set a documented retention period in Umami.
+- Back up with `deploy/umami/backup.sh`, copy backups off-site encrypted, and
+  test `restore.sh` periodically.
+- Create one website per surface (landing, member app, institutional portal)
+  and put the website ID in the matching frontend build environment.
+- Keep the dashboard restricted to platform staff. Organization admins do not
+  receive access to platform analytics.
 
-Create a private deployment directory on the analytics host (do not commit the
-real `.env`):
-
-```yaml
-services:
-  umami:
-    image: ghcr.io/umami-software/umami:postgresql-latest
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_TYPE: postgresql
-      DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
-      APP_SECRET: ${APP_SECRET}
-      DISABLE_TELEMETRY: "1"
-    ports:
-      - "127.0.0.1:3000:3000"
-
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: umami
-      POSTGRES_USER: umami
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - umami-db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  umami-db:
-```
-
-`.env`:
-
-```dotenv
-POSTGRES_PASSWORD=replace-with-a-long-random-password
-APP_SECRET=replace-with-a-long-random-secret
-```
-
-Start with `docker compose up -d`. Put Caddy, Nginx or Cloudflare Tunnel in
-front of `127.0.0.1:3000` and terminate TLS at the proxy. Example Caddy site:
-
-```caddyfile
-analytics.curiousbright.com.ng {
-  reverse_proxy 127.0.0.1:3000
-}
-```
-
-Do not expose PostgreSQL publicly. Back up the `umami-db` volume and test a
-restore. Pin image tags after validating an upgrade instead of always using
-`latest`.
-
-### 4.3 Configure the websites
-
-1. Sign in to Umami and change the default admin password.
-2. Create three websites:
-   - `Curious Bright` — `https://curiousbright.com.ng`
-   - `Curious Bright App` — `https://app.curiousbright.com.ng`
-   - `Curious Bright Institutional` — `https://org.curiousbright.com.ng`
-3. Copy each website ID.
-4. The tracker URL is usually `https://analytics.curiousbright.com.ng/script.js`.
-   If ad-blocking becomes a problem, configure `TRACKER_SCRIPT_NAME` on the
-   server and use that custom script path in the matching frontend.
-5. Keep automatic tracking **off**: the clients set `data-auto-track="false"`
-   and send explicit `pageview` events after route changes.
-
-### 4.4 Retention and access
-
-- Set a retention policy appropriate to the privacy notice (for example 12
-  months), and document it. Umami self-hosted does not automatically expire
-  everything for you.
-- Restrict the analytics host/admin to staff; use a password manager and TLS.
-- Do not grant organization admins access to platform analytics.
-- Export only aggregate reports. Do not join analytics events to learner
-  accounts or organization records.
-- Add the analytics host to the privacy policy and, if required by counsel, the
-  cookie/consent notice. Cookieless tracking still needs an appropriate legal
-  basis and transparency.
+Do not expose PostgreSQL publicly. Pin the Umami image tag after validating an
+upgrade instead of always using `latest`.
 
 ## 5. Frontend integration
 
@@ -226,16 +180,19 @@ The code is already present in all three apps and is intentionally tiny.
 
 ### Landing page
 
-`apps/landing-page/src/lib/analytics.ts` loads the Umami script, and
-`src/components/AnalyticsTracker.tsx` sends a pageview on route changes.
-`src/pages/Pricing.tsx` sends `pricing_cta` with plan, interval and currency.
+`apps/landing-page/src/lib/analytics.ts` loads the Umami script with automatic
+pageviews disabled (`data-auto-pageview="false"`), and
+`src/components/AnalyticsTracker.tsx` sends a sanitized pageview on route
+changes. `src/pages/Pricing.tsx` sends `pricing_cta` with plan, interval and
+currency.
 
 ### Member app
 
 `apps/web/src/lib/analytics.ts` and
-`apps/web/src/components/AnalyticsTracker.tsx` do the same. The only product
-event currently sent is `organization_join_requested` in
-`src/pages/JoinOrganization.tsx`.
+`apps/web/src/components/AnalyticsTracker.tsx` do the same, replacing dynamic
+IDs and usernames with route placeholders. Product events are sent from the
+auth, feed, messaging and payment flows listed above, plus
+`organization_join_requested` in `src/pages/JoinOrganization.tsx`.
 
 ### Institutional portal
 
@@ -267,6 +224,10 @@ the website ID and script URL are not secrets, but never put an API key here.
 4. Click a pricing CTA and verify only plan/interval/currency appear.
 5. Complete a join request and verify no username/email appears in the event.
 6. Check the browser network panel for accidental message/search/email data.
+7. Enable Do Not Track or Global Privacy Control and confirm the Umami script is
+   not requested.
+8. Build once with both `VITE_UMAMI_*` values empty and confirm the analytics
+   module no-ops (see the `test:analytics` scripts).
 7. Disable the two env vars in a preview build and confirm analytics is a no-op.
 
 ## 6. Decision log

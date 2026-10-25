@@ -142,6 +142,12 @@ UNFOLD = {
                         "icon": "space_dashboard",
                         "link": reverse_lazy("admin:index"),
                     },
+                    {
+                        "title": "Analytics",
+                        "icon": "monitoring",
+                        "link": reverse_lazy("admin_analytics"),
+                        "permission": "apps.core.admin_analytics.can_view_analytics",
+                    },
                 ],
             },
             {
@@ -190,6 +196,51 @@ UNFOLD = {
                     {"title": "Users", "icon": "group", "link": reverse_lazy("admin:accounts_user_changelist")},
                     {"title": "Profiles", "icon": "badge", "link": reverse_lazy("admin:accounts_profile_changelist")},
                     {"title": "Follows", "icon": "person_add", "link": reverse_lazy("admin:accounts_follow_changelist")},
+                ],
+            },
+            {
+                "title": "Organizations",
+                "items": [
+                    {
+                        "title": "Organizations",
+                        "icon": "account_balance",
+                        "link": reverse_lazy("admin:organizations_organization_changelist"),
+                        "badge": "apps.organizations.admin.pending_review_badge",
+                        "badge_variant": "warning",
+                    },
+                    {
+                        "title": "Verification reviews",
+                        "icon": "verified_user",
+                        "link": reverse_lazy("admin:organizations_organizationverification_changelist"),
+                    },
+                    {
+                        "title": "Join requests",
+                        "icon": "person_add",
+                        "link": reverse_lazy("admin:organizations_organizationjoinrequest_changelist"),
+                    },
+                    {
+                        "title": "Memberships",
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:organizations_organizationmembership_changelist"),
+                    },
+                    {
+                        "title": "Invitations",
+                        "icon": "mail",
+                        "link": reverse_lazy("admin:organizations_organizationinvitation_changelist"),
+                    },
+                    {
+                        "title": "Verification events",
+                        "icon": "history",
+                        "link": reverse_lazy("admin:organizations_organizationverificationevent_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Billing",
+                "items": [
+                    {"title": "Subscriptions", "icon": "card_membership", "link": reverse_lazy("admin:billing_organizationsubscription_changelist")},
+                    {"title": "Payments", "icon": "payments", "link": reverse_lazy("admin:billing_payment_changelist")},
+                    {"title": "Plans", "icon": "sell", "link": reverse_lazy("admin:billing_plantier_changelist")},
                 ],
             },
         ],
@@ -297,8 +348,8 @@ WS_TICKET_TTL_SECONDS = env_int("WS_TICKET_TTL_SECONDS", 60)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        "apps.accounts.authentication.ActivityJWTAuthentication",
+        "apps.accounts.authentication.ActivitySessionAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticatedOrReadOnly",),
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.DefaultPagination",
@@ -317,6 +368,10 @@ REST_FRAMEWORK = {
         "change_email": "6/min",
         "password_reset": "6/min",
         "ws_ticket": "60/min",
+        "org_verification": "12/min",
+        "org_verification_resend": "6/min",
+        "org_verification_code": "12/min",
+        "video_session": "120/min",
     },
 }
 
@@ -355,9 +410,10 @@ if not DEBUG:
 LOGIN_URL = "/admin/login/"
 
 # --- Email (invitations, verification, password reset) ---
-# Existing invitation/moderation mail uses Django's EMAIL_BACKEND. The new
-# transactional flows use EMAIL_PROVIDER: "console"/"django" for local dev and
-# "resend" for production. Keeping the provider explicit means a local .env can
+# Organization invitations, join requests and verification mail use the same
+# transactional dispatcher. Moderation approval mail still uses Django's
+# EMAIL_BACKEND. The dispatcher uses EMAIL_PROVIDER: "console"/"django" for
+# local dev and "resend" for production. Keeping the provider explicit means a local .env can
 # retain RESEND_API_KEY for later use without accidentally sending real mail.
 EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", "")
@@ -382,8 +438,8 @@ if EMAIL_PROVIDER == "console":
 if not DEBUG and "console" in EMAIL_BACKEND:
     logger.error(
         "EMAIL_BACKEND is the console backend while DJANGO_DEBUG=False: "
-        "invitation and moderation email will be written to logs. Configure "
-        "SMTP or set EMAIL_BACKEND explicitly."
+        "moderation email will be written to logs. Configure SMTP or set "
+        "EMAIL_BACKEND explicitly."
     )
 
 RESEND_API_KEY = env("RESEND_API_KEY", "")
@@ -415,8 +471,18 @@ PASSWORD_RESET_IP_HOURLY_LIMIT = env_int("PASSWORD_RESET_IP_HOURLY_LIMIT", 10)
 ORG_FRONTEND_URL = env("ORG_FRONTEND_URL", "https://org.curiousbright.com.ng")
 APP_FRONTEND_URL = env("APP_FRONTEND_URL", "https://app.curiousbright.com.ng")
 LANDING_FRONTEND_URL = env("LANDING_FRONTEND_URL", "https://curiousbright.com.ng")
+ADMIN_BASE_URL = env("ADMIN_BASE_URL", "https://api.curiousbright.com.ng")
 BILLING_CALLBACK_URL = env(
     "BILLING_CALLBACK_URL", f"{ORG_FRONTEND_URL.rstrip('/')}/billing/verify"
+)
+
+# Organization verification review notifications. The badge in the admin is
+# always live; this address is the extra email alert.
+ORG_REVIEW_NOTIFY_EMAIL = env("ORG_REVIEW_NOTIFY_EMAIL", SUPPORT_EMAIL)
+ORG_VERIFICATION_TOKEN_TTL_HOURS = env_int("ORG_VERIFICATION_TOKEN_TTL_HOURS", 24)
+ORG_VERIFICATION_CODE_TTL_MINUTES = env_int("ORG_VERIFICATION_CODE_TTL_MINUTES", 15)
+ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int(
+    "ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60
 )
 
 # The browser clients live on several origins. Keep the CORS allow-list usable

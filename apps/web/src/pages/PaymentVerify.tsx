@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../state/AuthContext';
+import { track } from '../lib/analytics';
 
 interface PaymentResult {
   reference: string;
@@ -39,7 +40,10 @@ export default function PaymentVerify() {
         return;
       }
       setPayment(result);
-      if (result.status === 'success') setStatus('success');
+      if (result.status === 'success') {
+        track('payment_success', { plan: result.plan_code || 'unknown' });
+        setStatus('success');
+      }
       else if (result.status === 'pending') setStatus('pending');
       else setStatus('failed');
     });

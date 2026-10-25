@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Room as LiveKitRoom, RoomEvent, Track } from 'livekit-client';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiFetchStrict } from '../lib/api';
 
 interface TokenResponse {
   token: string;
@@ -91,9 +91,49 @@ export default function VideoCall({
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const roomRef = useRef<LiveKitRoom | null>(null);
+  const videoSessionRef = useRef<{ id: number; timer?: number } | null>(null);
+  const callActiveRef = useRef(false);
+
+  const stopVideoSession = () => {
+    callActiveRef.current = false;
+    const current = videoSessionRef.current;
+    videoSessionRef.current = null;
+    if (!current) return;
+    if (current.timer) window.clearInterval(current.timer);
+    void apiFetchStrict(`/rooms/${roomId}/video-sessions/${current.id}/end/`, {
+      method: 'POST',
+      // Let the browser finish this request when the tab is closing.
+      keepalive: true,
+    }).catch(() => {
+      // A closed tab or a transient network failure must never block leaving.
+    });
+  };
+
+  const startVideoSession = async () => {
+    try {
+      const data = await apiFetchStrict<{ id: number; heartbeat_interval: number }>(
+        `/rooms/${roomId}/video-sessions/start/`,
+        { method: 'POST' },
+      );
+      if (!data?.id || !callActiveRef.current || videoSessionRef.current) return;
+      const timer = window.setInterval(() => {
+        const session = videoSessionRef.current;
+        if (!session) return;
+        void apiFetchStrict(`/rooms/${roomId}/video-sessions/${session.id}/heartbeat/`, {
+          method: 'POST',
+        }).catch(() => {
+          // Heartbeats are best-effort; the server caps stale sessions.
+        });
+      }, Math.max(15, data.heartbeat_interval || 30) * 1000);
+      videoSessionRef.current = { id: data.id, timer };
+    } catch {
+      // Video calling still works when aggregate duration tracking is down.
+    }
+  };
 
   useEffect(() => {
     return () => {
+      stopVideoSession();
       const room = roomRef.current;
       roomRef.current = null;
       if (room) {
@@ -101,6 +141,8 @@ export default function VideoCall({
         void room.disconnect();
       }
     };
+    // The cleanup intentionally runs once for the mounted call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = () => {
@@ -112,8 +154,10 @@ export default function VideoCall({
     setConnecting(true);
     setError('');
 
+    callActiveRef.current = true;
     const credentials = await apiFetch<TokenResponse>(`/rooms/${roomId}/livekit-token/`, { method: 'POST' });
     if (!credentials?.token) {
+      callActiveRef.current = false;
       setConnecting(false);
       return;
     }
@@ -130,6 +174,7 @@ export default function VideoCall({
     room.on(RoomEvent.LocalTrackUnpublished, refresh);
     room.on(RoomEvent.ActiveSpeakersChanged, refresh);
     room.on(RoomEvent.Disconnected, () => {
+      stopVideoSession();
       setConnected(false);
       setTiles([]);
     });
@@ -137,6 +182,7 @@ export default function VideoCall({
     try {
       await room.connect(credentials.url, credentials.token);
       setConnected(true);
+      void startVideoSession();
       await room.startAudio().catch(() => {});
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -153,6 +199,7 @@ export default function VideoCall({
       setCamOn(room.localParticipant.isCameraEnabled);
       refresh();
     } catch {
+      callActiveRef.current = false;
       setError('Could not join the call. Check your connection and try again.');
       roomRef.current = null;
       room.removeAllListeners();
@@ -179,6 +226,7 @@ export default function VideoCall({
   };
 
   const leave = async () => {
+    stopVideoSession();
     const room = roomRef.current;
     roomRef.current = null;
     if (room) {

@@ -1,7 +1,9 @@
+import re
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -14,15 +16,32 @@ from apps.organizations.models import (
     OrganizationMembership,
     OrganizationVerification,
 )
-from apps.organizations.services import approve_verification, reject_verification
+from apps.organizations.services import (
+    VerificationError,
+    approve_verification,
+    reject_verification,
+    request_more_information,
+    signed_document_url,
+    suspend_organization,
+)
 from apps.organizations.validators import validate_verification_document
 
 User = get_user_model()
 
 
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    EMAIL_PROVIDER="console",
+    EMAIL_DELIVERY_ASYNC=False,
+    ORG_REVIEW_NOTIFY_EMAIL="",
+    ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS=60,
+    ORG_VERIFICATION_TOKEN_TTL_HOURS=24,
+    ORG_VERIFICATION_CODE_TTL_MINUTES=15,
+)
 class OrganizationVerificationTests(TestCase):
     def setUp(self):
+        cache.clear()
+        mail.outbox.clear()
         self.owner = User.objects.create_user(
             username="verifyowner",
             email="owner@greenfield.edu",
@@ -55,7 +74,9 @@ class OrganizationVerificationTests(TestCase):
             "contact_phone": "+2348000000000",
             "registration_number": "RC-12345",
             "is_government_funded": False,
-            "head_of_institution": "Professor Example",
+            "head_name": "Professor Example",
+            "head_role": "Vice-Chancellor",
+            "head_email": "vc@greenfield.edu",
         }
         data.update(overrides)
         return data
@@ -67,58 +88,365 @@ class OrganizationVerificationTests(TestCase):
             format="json",
         )
 
-    def test_submit_confirms_official_email_and_can_be_approved(self):
+    def verification(self):
+        return OrganizationVerification.objects.get(organization=self.org)
+
+    def email_code(self, index=0):
+        body = mail.outbox[index].body
+        match = re.search(r"code: (\d{6})", body)
+        self.assertIsNotNone(match, body)
+        return match.group(1)
+
+    def confirm(self, verification=None):
+        verification = verification or self.verification()
+        return self.client.post(
+            f"/api/organizations/verification/email/{verification.official_email_token}/"
+        )
+
+    def test_submit_starts_email_pending_then_confirmation_moves_to_review(self):
         response = self.submit()
         self.assertEqual(response.status_code, 201, response.content)
         self.org.refresh_from_db()
-        self.assertEqual(self.org.verification_status, Organization.VerificationStatus.PENDING)
-        verification = OrganizationVerification.objects.get(organization=self.org)
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.EMAIL_PENDING
+        )
+        verification = self.verification()
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("registry@greenfield.edu", mail.outbox[0].to)
+        self.assertIn("/verification/email/", mail.outbox[0].body)
 
-        confirm = self.client.post(
-            f"/api/organizations/verification/email/{verification.official_email_token}/"
-        )
+        confirm = self.confirm(verification)
         self.assertEqual(confirm.status_code, 200, confirm.content)
+        self.org.refresh_from_db()
         verification.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status,
+            Organization.VerificationStatus.PENDING_REVIEW,
+        )
         self.assertIsNotNone(verification.official_email_verified_at)
+        self.assertTrue(
+            self.org.verification_events.filter(action="email_confirmed").exists()
+        )
 
         approve_verification(verification, self.owner, "Documents match.")
         self.org.refresh_from_db()
-        self.assertEqual(self.org.verification_status, Organization.VerificationStatus.VERIFIED)
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.VERIFIED
+        )
+        self.assertEqual(self.org.country, "Nigeria")
         self.assertIsNotNone(self.org.verified_at)
         self.assertTrue(self.org.verification_events.filter(action="approved").exists())
+        self.assertTrue(
+            any("verified on Curious Bright" in message.subject for message in mail.outbox)
+        )
 
-    def test_official_email_must_match_website_domain(self):
+    def test_confirmation_code_is_valid_and_single_use(self):
+        self.submit()
+        verification = self.verification()
+        code = self.email_code()
+        response = self.client.post(
+            "/api/organizations/verification/email/confirm-code/",
+            {"official_email": verification.official_email, "code": code},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.json()["status"],
+            Organization.VerificationStatus.PENDING_REVIEW,
+        )
+        replay = self.client.post(
+            "/api/organizations/verification/email/confirm-code/",
+            {"official_email": verification.official_email, "code": code},
+            format="json",
+        )
+        self.assertEqual(replay.status_code, 409)
+        self.assertEqual(replay.json()["code"], "already_confirmed")
+
+    def test_expired_confirmation_link_is_rejected(self):
+        self.submit()
+        verification = self.verification()
+        verification.official_email_token_expires_at = timezone.now() - timedelta(seconds=1)
+        verification.save(update_fields=["official_email_token_expires_at"])
+        response = self.confirm(verification)
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["code"], "token_expired")
+
+    def test_expired_code_is_rejected(self):
+        self.submit()
+        verification = self.verification()
+        code = self.email_code()
+        verification.official_email_code_expires_at = timezone.now() - timedelta(seconds=1)
+        verification.save(update_fields=["official_email_code_expires_at"])
+        response = self.client.post(
+            "/api/organizations/verification/email/confirm-code/",
+            {"official_email": verification.official_email, "code": code},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["code"], "code_expired")
+
+    def test_five_wrong_codes_lock_the_confirmation_code(self):
+        self.submit()
+        verification = self.verification()
+        correct = self.email_code()
+        wrong = "000000" if correct != "000000" else "111111"
+        response = None
+        for _ in range(5):
+            response = self.client.post(
+                "/api/organizations/verification/email/confirm-code/",
+                {"official_email": verification.official_email, "code": wrong},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 429, response.content)
+        self.assertEqual(response.json()["code"], "too_many_attempts")
+        verification.refresh_from_db()
+        self.assertEqual(verification.official_email_code_attempts, 5)
+        self.assertIsNone(verification.official_email_verified_at)
+
+    def test_confirmation_link_cannot_be_reused(self):
+        self.submit()
+        verification = self.verification()
+        token = verification.official_email_token
+        self.assertEqual(self.confirm(verification).status_code, 200)
+        response = self.client.post(f"/api/organizations/verification/email/{token}/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "invalid_token")
+
+    def test_approval_is_blocked_until_official_email_is_confirmed(self):
+        self.submit()
+        verification = self.verification()
+        with self.assertRaises(VerificationError) as ctx:
+            approve_verification(verification, self.owner, "Looks good.")
+        self.assertEqual(ctx.exception.code, "email_not_confirmed")
+        self.org.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.EMAIL_PENDING
+        )
+        self.assertIsNone(self.org.verified_at)
+
+    def test_domain_mismatch_is_flagged_for_review_not_blocked(self):
         response = self.submit(official_email="person@gmail.com")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("official email", response.json()["message"].lower())
+        self.assertEqual(response.status_code, 201, response.content)
+        verification = self.verification()
+        self.assertFalse(verification.official_email_domain_matches)
+        self.assertEqual(verification.official_email, "person@gmail.com")
 
     def test_public_university_requires_registration_evidence_and_head(self):
         response = self.submit(
             is_government_funded=True,
             registration_number="",
-            head_of_institution="",
+            head_name="",
+            head_email="",
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("registration", response.json()["message"].lower())
 
+        response = self.submit(
+            is_government_funded=True,
+            head_name="",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("vice-chancellor", response.json()["message"].lower())
+
+        response = self.submit(
+            is_government_funded=True,
+            head_role="",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("role", response.json()["message"].lower())
+
+        response = self.submit(
+            is_government_funded=True,
+            head_email="",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json()["message"].lower())
+
     def test_rejected_application_can_be_resubmitted(self):
         self.submit()
-        verification = OrganizationVerification.objects.get(organization=self.org)
+        verification = self.verification()
+        self.confirm(verification)
+        verification.refresh_from_db()
         reject_verification(verification, self.owner, "The document was unreadable.")
         self.org.refresh_from_db()
-        self.assertEqual(self.org.verification_status, Organization.VerificationStatus.REJECTED)
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.REJECTED
+        )
 
         response = self.submit(address="2 New University Road, Lagos")
         self.assertEqual(response.status_code, 200, response.content)
         self.org.refresh_from_db()
-        self.assertEqual(self.org.verification_status, Organization.VerificationStatus.PENDING)
+        self.assertEqual(
+            self.org.verification_status,
+            Organization.VerificationStatus.PENDING_REVIEW,
+        )
         verification.refresh_from_db()
         self.assertEqual(verification.attempt, 2)
         self.assertTrue(
             self.org.verification_events.filter(action="resubmitted").exists()
         )
+
+    def test_resend_is_cooled_down_and_rotates_the_code(self):
+        self.submit()
+        verification = self.verification()
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/verification/resend/"
+        )
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["code"], "cooldown")
+        self.assertEqual(len(mail.outbox), 1)
+
+        verification.official_email_last_sent_at = timezone.now() - timedelta(seconds=61)
+        verification.save(update_fields=["official_email_last_sent_at"])
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/verification/resend/"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(mail.outbox), 2)
+        new_code = self.email_code(1)
+        verification.refresh_from_db()
+        old_code = self.email_code(0)
+        self.assertNotEqual(old_code, new_code)
+        self.assertEqual(
+            self.client.post(
+                "/api/organizations/verification/email/confirm-code/",
+                {"official_email": verification.official_email, "code": old_code},
+                format="json",
+            ).json()["code"],
+            "invalid_code",
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/organizations/verification/email/confirm-code/",
+                {"official_email": verification.official_email, "code": new_code},
+                format="json",
+            ).status_code,
+            200,
+        )
+
+    def test_official_email_cannot_be_attached_to_two_organizations(self):
+        first = self.submit()
+        self.assertEqual(first.status_code, 201, first.content)
+
+        other = Organization.objects.create(
+            name="Second University",
+            domain="second.edu",
+            owner=self.owner,
+        )
+        OrganizationMembership.objects.create(
+            organization=other,
+            user=self.owner,
+            role=OrganizationMembership.Role.OWNER,
+        )
+        response = self.client.post(
+            f"/api/organizations/{other.slug}/verification/",
+            self.payload(official_email="registry@greenfield.edu"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["code"], "email_in_use")
+        self.assertFalse(
+            OrganizationVerification.objects.filter(organization=other).exists()
+        )
+
+    def test_official_email_can_be_changed_and_requires_reconfirmation(self):
+        self.submit()
+        self.confirm()
+        verification = self.verification()
+        self.assertIsNotNone(verification.official_email_verified_at)
+        response = self.client.post(
+            f"/api/organizations/{self.org.slug}/verification/official-email/",
+            {"official_email": "registrar@greenfield.edu"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.org.refresh_from_db()
+        verification.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.EMAIL_PENDING
+        )
+        self.assertIsNone(verification.official_email_verified_at)
+        self.assertEqual(verification.official_email, "registrar@greenfield.edu")
+        self.assertIn("registrar@greenfield.edu", mail.outbox[-1].to)
+        self.assertTrue(
+            self.org.verification_events.filter(action="email_changed").exists()
+        )
+
+    def test_request_more_information_keeps_pending_review_and_allows_resubmit(self):
+        self.submit()
+        verification = self.verification()
+        self.confirm(verification)
+        verification.refresh_from_db()
+        request_more_information(verification, self.owner, "Please add a council letter.")
+        self.org.refresh_from_db()
+        verification.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status,
+            Organization.VerificationStatus.PENDING_REVIEW,
+        )
+        self.assertIsNotNone(verification.info_requested_at)
+        self.assertEqual(verification.info_request_note, "Please add a council letter.")
+
+        response = self.submit(address="3 University Road, Lagos")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.org.refresh_from_db()
+        verification.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status,
+            Organization.VerificationStatus.PENDING_REVIEW,
+        )
+        self.assertIsNone(verification.info_requested_at)
+        self.assertTrue(
+            self.org.verification_events.filter(action="resubmitted").exists()
+        )
+
+    def test_suspended_organization_cannot_resubmit(self):
+        self.submit()
+        verification = self.verification()
+        self.confirm(verification)
+        verification.refresh_from_db()
+        approve_verification(verification, self.owner, "Approved.")
+        self.org.refresh_from_db()
+        suspend_organization(self.org, self.owner, "Fraudulent documents.")
+        self.org.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.SUSPENDED
+        )
+        self.assertEqual(self.org.suspension_reason, "Fraudulent documents.")
+        response = self.submit(address="New address")
+        self.assertEqual(response.status_code, 409)
+
+    def test_verified_organization_domain_change_requires_reverification(self):
+        self.submit()
+        verification = self.verification()
+        self.confirm(verification)
+        verification.refresh_from_db()
+        approve_verification(verification, self.owner, "Approved.")
+        self.org.refresh_from_db()
+        self.org.auto_join_domain = True
+        self.org.save(update_fields=["auto_join_domain"])
+
+        response = self.client.patch(
+            f"/api/organizations/{self.org.slug}/",
+            {"domain": "new-greenfield.edu"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.org.refresh_from_db()
+        self.assertEqual(
+            self.org.verification_status, Organization.VerificationStatus.UNVERIFIED
+        )
+        self.assertIsNone(self.org.verified_at)
+        self.assertFalse(self.org.auto_join_domain)
+        self.assertTrue(
+            self.org.verification_events.filter(action="domain_changed").exists()
+        )
+
+    def test_admin_pending_review_email_is_sent_after_confirmation(self):
+        with self.settings(ORG_REVIEW_NOTIFY_EMAIL="review@example.com"):
+            self.submit()
+            self.confirm()
+        self.assertTrue(any("review@example.com" in message.to for message in mail.outbox))
 
     def test_unverified_org_is_gated_from_member_growth(self):
         invite = self.client.post(
@@ -263,7 +591,12 @@ class OrganizationVerificationTests(TestCase):
         )
         allowed = self.client.post(
             "/api/organizations/",
-            {"name": "Portal Org", "domain": "portal.example"},
+            {
+                "name": "Portal Org",
+                "domain": "portal.example",
+                "accept_terms": True,
+                "accept_privacy": True,
+            },
             format="json",
             HTTP_X_CLIENT_APP="institutional",
         )
@@ -313,6 +646,14 @@ class OrganizationVerificationTests(TestCase):
             ).status_code,
             200,
         )
+
+        signed = self.client.get(signed_document_url(verification))
+        self.assertEqual(signed.status_code, 200)
+        invalid = self.client.get(
+            "/api/organizations/verification/document/signed/not-a-valid-token/"
+        )
+        self.assertEqual(invalid.status_code, 403)
+
         verification.registration_document.delete(save=False)
 
 

@@ -20,6 +20,7 @@ urlpatterns = [
     path("logout/", views.LogoutView.as_view(), name="logout"),
     path("ws-ticket/", views.WebSocketTicketView.as_view(), name="ws_ticket"),
     path("me/", views.MeView.as_view(), name="me"),
+    path("consent/", views.ConsentView.as_view(), name="consent"),
     path("change-password/", views.ChangePasswordView.as_view(), name="change_password"),
     path("export/", views.ExportAccountView.as_view(), name="account_export"),
     path("delete-account/", views.DeleteAccountView.as_view(), name="account_delete"),

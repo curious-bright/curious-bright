@@ -11,7 +11,24 @@ from .models import (
     OrganizationVerification,
     OrganizationVerificationEvent,
 )
-from .services import approve_verification, reject_verification
+from .services import (
+    VerificationError,
+    approve_verification,
+    reject_verification,
+    request_more_information,
+    signed_document_url,
+    suspend_organization,
+)
+
+
+def pending_review_badge(request):
+    """Unfold sidebar badge: organizations waiting for an admin decision."""
+    if not request.user.is_active or not request.user.is_staff:
+        return None
+    count = Organization.objects.filter(
+        verification_status=Organization.VerificationStatus.PENDING_REVIEW
+    ).count()
+    return str(count) if count else None
 
 
 class MembershipInline(admin.TabularInline):
@@ -47,7 +64,13 @@ class OrganizationAdmin(admin.ModelAdmin):
     autocomplete_fields = ("owner",)
     prepopulated_fields = {"slug": ("name",)}
     inlines = [MembershipInline]
-    readonly_fields = ("created_at", "updated_at", "verified_at")
+    readonly_fields = (
+        "verification_status",
+        "created_at",
+        "updated_at",
+        "verified_at",
+        "suspension_reason",
+    )
 
 
 @admin.register(OrganizationMembership)
@@ -73,6 +96,8 @@ class VerificationAdminForm(forms.ModelForm):
             ("", "Keep current status"),
             ("approve", "Approve and verify"),
             ("reject", "Reject with note"),
+            ("request_info", "Request more information"),
+            ("suspend", "Suspend organization"),
         ),
         required=False,
         help_text="Reviewing here sends the organization an email and writes an audit event.",
@@ -80,7 +105,10 @@ class VerificationAdminForm(forms.ModelForm):
     review_note = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Required when rejecting. Shown to the organization in the email.",
+        help_text=(
+            "Required for rejection, information requests and suspension. "
+            "Shown to the organization in the email."
+        ),
     )
 
     class Meta:
@@ -96,10 +124,16 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
         "organization_status",
         "official_email",
         "email_confirmed",
+        "domain_match",
         "submitted_at",
         "attempt",
     )
-    list_filter = ("organization__verification_status", "org_type", "is_government_funded")
+    list_filter = (
+        "organization__verification_status",
+        "org_type",
+        "is_government_funded",
+        "official_email_domain_matches",
+    )
     search_fields = (
         "organization__name",
         "organization__slug",
@@ -110,14 +144,22 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
     autocomplete_fields = ("organization",)
     readonly_fields = (
         "organization",
+        "official_email",
         "official_email_token",
+        "official_email_token_expires_at",
         "official_email_verified_at",
+        "official_email_code_expires_at",
+        "official_email_code_attempts",
+        "official_email_last_sent_at",
         "submitted_at",
         "reviewed_at",
         "reviewed_by",
         "rejection_reason",
+        "info_requested_at",
+        "info_request_note",
         "attempt",
         "document_preview",
+        "domain_match",
         "created_at",
         "updated_at",
     )
@@ -134,6 +176,8 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
                     "website",
                     "is_government_funded",
                     "head_of_institution",
+                    "head_role",
+                    "head_email",
                 )
             },
         ),
@@ -144,6 +188,11 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
                     "official_email",
                     "official_email_verified_at",
                     "official_email_token",
+                    "official_email_token_expires_at",
+                    "official_email_code_expires_at",
+                    "official_email_code_attempts",
+                    "official_email_last_sent_at",
+                    "domain_match",
                     "contact_name",
                     "contact_role",
                     "contact_email",
@@ -171,6 +220,8 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
                     "reviewed_at",
                     "reviewed_by",
                     "rejection_reason",
+                    "info_requested_at",
+                    "info_request_note",
                     "attempt",
                     "created_at",
                     "updated_at",
@@ -188,45 +239,77 @@ class OrganizationVerificationAdmin(admin.ModelAdmin):
     def organization_status(self, obj):
         return obj.organization.verification_status
 
-    @admin.display(description="Verified")
+    @admin.display(description="Email confirmed")
     def email_confirmed(self, obj):
         return bool(obj.official_email_verified_at)
+
+    @admin.display(description="Domain match")
+    def domain_match(self, obj):
+        if obj.official_email_domain_matches:
+            return "Yes"
+        return format_html(
+            '<strong style="color:#b45309">No — review</strong>'
+        )
 
     @admin.display(description="Document")
     def document_preview(self, obj):
         if not obj.registration_document:
             return "No document uploaded"
+        url = signed_document_url(obj)
         return format_html(
-            '<a href="/api/organizations/{}/verification/document/" target="_blank" rel="noopener">'
-            "Download private document</a>",
-            obj.organization.slug,
+            '<a href="{}" target="_blank" rel="noopener noreferrer">'
+            "Open private document (signed link, 5 minutes)</a>",
+            url,
         )
 
     def has_add_permission(self, request):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     def save_model(self, request, obj, form, change):
         decision = form.cleaned_data.get("decision")
         note = (form.cleaned_data.get("review_note") or "").strip()
-        if decision == "reject" and not note:
-            # The admin form cannot easily raise from save_model; the message is
-            # clear and the object remains in review until a note is supplied.
+        if decision in ("reject", "request_info", "suspend") and not note:
             self.message_user(
                 request,
-                "A rejection note is required. Nothing was changed.",
+                "A note is required for this decision. Nothing was changed.",
                 level=messages.ERROR,
             )
             return
-        if decision in ("approve", "reject"):
-            super().save_model(request, obj, form, change)
-            if decision == "approve":
-                approve_verification(obj, request.user, note)
-                self.message_user(request, f"{obj.organization.name} is now verified.")
-            else:
-                reject_verification(obj, request.user, note)
-                self.message_user(request, f"{obj.organization.name} was rejected.")
-            return
         super().save_model(request, obj, form, change)
+        if decision == "approve":
+            try:
+                approve_verification(obj, request.user, note)
+            except VerificationError as exc:
+                self.message_user(request, exc.message, level=messages.ERROR)
+                return
+            self.message_user(request, f"{obj.organization.name} is now verified.")
+        elif decision == "reject":
+            try:
+                reject_verification(obj, request.user, note)
+            except VerificationError as exc:
+                self.message_user(request, exc.message, level=messages.ERROR)
+                return
+            self.message_user(request, f"{obj.organization.name} was rejected.")
+        elif decision == "request_info":
+            try:
+                request_more_information(obj, request.user, note)
+            except VerificationError as exc:
+                self.message_user(request, exc.message, level=messages.ERROR)
+                return
+            self.message_user(
+                request,
+                f"Requested more information from {obj.organization.name}.",
+            )
+        elif decision == "suspend":
+            try:
+                suspend_organization(obj.organization, request.user, note)
+            except VerificationError as exc:
+                self.message_user(request, exc.message, level=messages.ERROR)
+                return
+            self.message_user(request, f"{obj.organization.name} was suspended.")
 
 
 @admin.register(OrganizationVerificationEvent)
@@ -240,6 +323,9 @@ class OrganizationVerificationEventAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 
@@ -279,4 +365,7 @@ class OrganizationAuditLogAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False

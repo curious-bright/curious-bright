@@ -184,6 +184,7 @@ export default function Settings() {
         <a href="#appearance">Appearance</a>
         <a href="#messaging">Messaging</a>
         <a href="#security">Security</a>
+        <a href="#legal">Legal</a>
         <a href="#data">Your data</a>
         <a href="#danger">Delete account</a>
       </nav>
@@ -420,6 +421,40 @@ export default function Settings() {
             {passwordSaved && <span className="save-note"><i className="bx bx-check-circle"></i> Password updated</span>}
           </div>
         </form>
+      </section>
+
+      <section id="legal" className="comment-corner-card settings-card">
+        <div className="settings-card-head">
+          <div>
+            <h3>Legal &amp; policies</h3>
+            <p className="text-sm text-muted">
+              These are the versions you accepted. We ask again whenever either policy changes.
+            </p>
+          </div>
+          <span className="badge-tag badge-teal">
+            Accepted {user.consent?.terms.accepted_at ? new Date(user.consent.terms.accepted_at).toLocaleDateString() : '—'}
+          </span>
+        </div>
+        <div className="settings-grid">
+          <div className="form-group">
+            <label>Terms of Use</label>
+            <p className="text-sm">
+              Version {user.consent?.terms.version || '—'} ·{' '}
+              <Link to="/terms" target="_blank" rel="noopener noreferrer">Read the Terms</Link>
+            </p>
+          </div>
+          <div className="form-group">
+            <label>Privacy Policy</label>
+            <p className="text-sm">
+              Version {user.consent?.privacy.version || '—'} ·{' '}
+              <Link to="/privacy" target="_blank" rel="noopener noreferrer">Read the Privacy Policy</Link>
+            </p>
+          </div>
+        </div>
+        <p className="text-xs text-muted" style={{ marginTop: '0.75rem' }}>
+          Last updated {user.consent?.last_updated || '—'}. For privacy requests, email{' '}
+          <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a>.
+        </p>
       </section>
 
       <section id="data" className="comment-corner-card settings-card">

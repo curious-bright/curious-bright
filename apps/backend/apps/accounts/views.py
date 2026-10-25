@@ -14,11 +14,14 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.core.legal import current_versions, record_consent
+
 from .auth_serializers import UsernameOrEmailTokenSerializer
 from .models import Follow, Profile
 from .serializers import (
     ChangeEmailSerializer,
     ChangePasswordSerializer,
+    ConsentAcceptSerializer,
     EmailOnlySerializer,
     FollowSerializer,
     PasswordResetConfirmSerializer,
@@ -72,6 +75,12 @@ class RegisterView(generics.CreateAPIView):
             serializer.validated_data["email"].strip().lower(), request
         )
         user = serializer.save()
+        record_consent(
+            user,
+            request=request,
+            accept_terms=serializer.validated_data.get("accept_terms", False),
+            accept_privacy=serializer.validated_data.get("accept_privacy", False),
+        )
         _, dispatch = issue_verification_code(
             user, request, enforce_limits=False, wait=False
         )
@@ -268,6 +277,31 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(UserSerializer(request.user, context={"request": request}).data)
+
+
+class ConsentView(APIView):
+    """Record acceptance of the current Terms and Privacy Policy versions."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ConsentAcceptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        record_consent(
+            request.user,
+            request=request,
+            accept_terms=serializer.validated_data["accept_terms"],
+            accept_privacy=serializer.validated_data["accept_privacy"],
+        )
+        return Response(
+            {
+                "code": "ok",
+                "message": "Thanks — your policy choices have been saved.",
+                "consent": UserSerializer(request.user, context={"request": request}).data[
+                    "consent"
+                ],
+            }
+        )
 
 
 class ChangePasswordView(APIView):

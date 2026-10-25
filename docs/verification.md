@@ -7,22 +7,56 @@ cannot create organizations; the institutional portal does that and sends
 
 ## 1. Status model
 
-`Organization.verification_status` has four values:
+`Organization.verification_status` has six values:
 
 | Status | Meaning | Can submit/resubmit? | Can create/invite students? | Appears in join search? |
 |---|---|---|---|---|
-| `unverified` | New organization or domain changed | Yes | No | No |
-| `pending` | Application submitted, waiting for the platform review team | No | No | No |
-| `verified` | Approved by platform staff | No (verified) | Yes | Yes, if join requests are enabled |
+| `unverified` | New organization, domain changed, or no complete application | Yes | No | No |
+| `email_pending` | Application saved; the official email is not yet confirmed | Yes (the portal normally guides the user through confirmation instead) | No | No |
+| `pending_review` | Official email confirmed; waiting for the platform review team | Only when an admin has requested more information | No | No |
+| `verified` | Approved by platform staff | No | Yes | Yes, if join requests are enabled |
 | `rejected` | Changes or evidence are required | Yes | No | No |
+| `suspended` | Workspace restricted for policy, fraud, safety or legal reasons | No | No | No |
+
+### Transitions
+
+```text
+unverified
+  └─ submit verification ──> email_pending
+                               ├─ confirm official email ──> pending_review
+                               │                              ├─ approve ──> verified
+                               │                              ├─ reject ───> rejected
+                               │                              └─ request info (stays pending_review)
+                               └─ change official email (stays email_pending)
+rejected ── resubmit ──> email_pending or pending_review
+verified ── suspend ──> suspended
+any non-verified ── suspend ──> suspended
+```
+
+- A submission with an unconfirmed official email moves the organization to
+  `email_pending`.
+- Confirming the official email moves it to `pending_review` and notifies the
+  platform review team.
+- Approval requires `pending_review` **and** a confirmed official email. The API
+  rejects approval with `email_not_confirmed` otherwise.
+- “Request more information” keeps the organization in `pending_review` and
+  sets `info_requested_at`/`info_request_note`. This is intentionally a flag,
+  not a seventh status. The owner can resubmit while the flag is set.
+- Rejection requires a note. Suspension requires a reason and sets
+  `suspension_reason`; it clears `verified_at`.
+- A verified organization that changes its email domain through
+  `PATCH /api/organizations/<slug>/` returns to `unverified`, `verified_at` is
+  cleared, auto-join is disabled, and an audit event is written. It must be
+  verified again.
 
 Existing memberships and existing students remain active when a status changes
-to `unverified`, `pending` or `rejected`. Only new growth — invitations,
-student creation, bulk import, account linking, join-request approval and
-domain auto-join — is blocked. A verified organization whose email domain is
-changed through `PATCH /api/organizations/<slug>/` is automatically returned to
-`unverified`, `verified_at` is cleared, auto-join is disabled and an audit
-event is written. It must be verified again.
+to `unverified`, `email_pending`, `pending_review`, `rejected` or `suspended`.
+Only new growth — invitations, student creation, bulk import, account linking,
+join-request approval and domain auto-join — is blocked.
+
+Every transition writes an `OrganizationVerificationEvent` and an
+`OrganizationAuditLog` entry. The portal shows the event history with actor and
+timestamp. Platform staff decisions are attributable.
 
 ## 2. Verification fields
 
@@ -37,26 +71,51 @@ The organization admin submits:
 - registration number;
 - registration document (PDF, JPEG or PNG);
 - whether the institution is government-funded;
-- head of institution (Vice-Chancellor, Rector or Dean) for universities.
+- head-of-institution details for government-funded universities:
+  - `head_name` (full name);
+  - `head_role` (Vice-Chancellor, Rector, Dean or equivalent);
+  - `head_email` (official email).
+
+The database keeps the legacy `head_of_institution` column. The API exposes it
+as `head_name` and also accepts the legacy key on input.
 
 For a government-funded / public university, the API requires a website,
-either a registration number or a registration document, and the head of
-institution. This is enforced server-side by `VerificationSubmitSerializer`.
+either a registration number or a registration document, and the head-of-
+institution name, role and email. This is enforced server-side by
+`VerificationSubmitSerializer`.
 
-### Official email and domain matching
+### Official email confirmation
 
-The website host and the official email domain must match. The backend
-normalises `www`, scheme and common subdomain differences. Disposable/free email
-providers are rejected. A confirmation email is sent to the official address;
-the reviewer can see whether it was confirmed. The confirmation link is a
-public, single-use token:
+The submission sends a confirmation email through the shared
+`apps.core.emails.dispatch_email` dispatcher (Resend in production; console in
+development). The email contains a single-use link and a six-digit fallback
+code.
+
+- Link TTL: **24 hours** (`ORG_VERIFICATION_TOKEN_TTL_HOURS`).
+- Code TTL: **15 minutes** (`ORG_VERIFICATION_CODE_TTL_MINUTES`).
+- Resend cooldown: **60 seconds**
+  (`ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS`).
+- Codes are stored as one-way hashes. Five wrong attempts lock the code until a
+  new one is issued.
+- The link token is rotated after successful confirmation, so a reused link
+  returns an error.
+- Changing the official email resets confirmation and issues a fresh link/code.
+  An email already attached to another verification request is rejected.
+- A suspended organization cannot resend or change the official email.
+- Public confirmation endpoints do not require authentication:
 
 ```text
 POST /api/organizations/verification/email/<uuid-token>/
+POST /api/organizations/verification/email/confirm-code/
+     { "official_email": "...", "code": "123456" }
 ```
 
-The token is rotated after confirmation. `POST .../verification/resend/`
-sends a fresh link while the address is unconfirmed.
+### Domain matching
+
+The website host and the official email domain are compared and the result is
+stored as `official_email_domain_matches`. A mismatch is a **review flag**, not a
+hard submission block: some institutions legitimately use a separate official
+mail domain. The reviewer sees the flag and decides.
 
 ### Document privacy and validation
 
@@ -69,6 +128,9 @@ sends a fresh link while the address is unconfirmed.
 - `GET /api/organizations/<slug>/verification/document/` streams the file only
   to an organization admin/owner or platform staff, with
   `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`.
+- The admin review screen can generate a short-lived signed URL valid for
+  **5 minutes**:
+  `GET /api/organizations/verification/document/signed/<token>/`.
 - Do not put verification uploads behind a public CDN, object-storage public
   bucket or the `/media/` proxy.
 
@@ -82,25 +144,35 @@ Never serve it with nginx/Caddy as a static directory.
    verification** on the persistent banner.
 2. The portal submits multipart form data to
    `POST /api/organizations/<slug>/verification/`.
-3. The API sets the organization to `pending`, records an attempt and writes an
-   `OrganizationVerificationEvent`, then emails the official address.
-4. Platform staff review the queue in Django admin:
+3. The API saves the application, sets the organization to `email_pending`
+   (or `pending_review` if the official email was already confirmed), records an
+   attempt and writes a `SUBMITTED`/`RESUBMITTED` event.
+4. The owner confirms the official email through the link or code. The API sets
+   `pending_review`, writes `EMAIL_CONFIRMED`, and emails the platform review
+   team.
+5. Platform staff review the queue in Django admin:
    - `Organization verification` records show the legal details, contact,
-     document download, email-confirmation state and event history.
-   - Approve with note → `verified`; reject with a required note →
-     `rejected`. The service sends an email, creates a notification and writes
-     an audit/verification event. Every decision is attributable to the staff
-     user.
-5. On rejection, the portal shows the reviewer note in the banner and modal.
-   The admin corrects fields or uploads a replacement document and resubmits.
-   The existing document is kept if no new file is uploaded.
-6. A verified organization can create student accounts, invite members, link
+     document download, email-confirmation state, domain-match flag and event
+     history.
+   - Approve with an optional note → `verified`.
+   - Reject with a required note → `rejected`.
+   - Request more information with a required note → stays `pending_review`
+     with `info_requested_at` set.
+   - Suspend with a required reason → `suspended`.
+   Every decision sends an email/notification and writes audit/verification
+   events.
+6. On rejection or an information request, the portal shows the reviewer note
+   in the banner and modal. The admin corrects fields or uploads a replacement
+   document and resubmits. The existing document is kept if no new file is
+   uploaded.
+7. A verified organization can create student accounts, invite members, link
    existing accounts and approve join requests. These gates are enforced in the
    API (`_require_verified`), not only by disabling buttons.
 
 Verification submissions are intentionally blocked with HTTP 409 while
-`pending` or `verified`. Resubmission is allowed for `unverified` and
-`rejected`.
+`verified` or `suspended`, and while `pending_review` unless an admin has
+requested more information. Resubmission is allowed for `unverified`,
+`rejected`, `email_pending`, and `pending_review` with an active info request.
 
 ## 4. Student join requests
 
@@ -111,9 +183,9 @@ organizations only:
 GET /api/organizations/search/?q=<name-or-domain>
 ```
 
-The search excludes unverified, pending and rejected organizations and
-organizations with join requests disabled. A signed-in learner can request to
-join:
+The search excludes unverified, email-pending, pending-review, rejected and
+suspended organizations and organizations with join requests disabled. A
+signed-in learner can request to join:
 
 ```text
 GET  /api/organizations/<slug>/join-requests/       (organization admins)
@@ -144,14 +216,19 @@ Rules:
 The portal (`../curious-bright-institutional`) includes:
 
 - a persistent verification banner on every organization screen for owner/admin
-  users;
-- a verification modal with status-specific copy, reviewer note, review
-  history, document download and resubmission;
-- an official-email confirmation status and resend action;
+  users, with copy for all six statuses;
+- a four-step progress tracker (details submitted → official email confirmed →
+  admin review → verified);
+- a verification modal with status-specific copy, reviewer note, info request,
+  suspension reason, review history, document download and resubmission;
+- an official-email confirmation panel with resend, email change and six-digit
+  code entry;
+- head-of-institution fields for government-funded universities;
 - a **Join requests** navigation item with pending badge, filters, learner
   message and optional decision note;
 - disabled student/invite/link controls when the organization is not verified,
   with an explanation pointing back to the banner;
+- `/privacy` and `/terms` pages linked from the footer and consent screens;
 - `/verification/email/<token>` handling that works even when signed out.
 
 The portal sends the `X-Client-App: institutional` header on every API request.
@@ -160,22 +237,62 @@ The backend also checks the `Origin`/`Referer` against
 creating institutions from the member app; it is not a substitute for API
 authorization.
 
-## 6. Deployment checklist
+## 6. Tests and edge cases
+
+Backend tests cover:
+
+- status transitions across all six values;
+- valid, expired and reused email confirmation links;
+- code expiry, five-attempt lock, and resend cooldown;
+- approval blocked before official-email confirmation;
+- email change validation and uniqueness;
+- signed document URL expiry/authorization;
+- request-info and resubmission;
+- suspension and approval/rejection notes;
+- verification permissions and audit events.
+
+Important edge cases:
+
+- A user may open the email link while signed out; the confirmation endpoint is
+  public and single-use.
+- A reused or expired link returns a clear error; the owner can resend from the
+  portal (subject to cooldown).
+- A code is invalidated by a successful link confirmation or a new resend.
+- A second click on an already-confirmed link returns “already confirmed” rather
+  than re-approving.
+- A domain mismatch is visible to reviewers but does not block submission.
+- Changing an official email returns the organization to `email_pending` and
+  clears `verified_at`.
+- A verified organization that changes its domain must be re-verified.
+- Suspension blocks resend, email change, submission and student growth.
+- Existing members and students are never removed automatically by a status
+  change.
+
+## 7. Deployment checklist
 
 - [ ] `ORG_FRONTEND_URL` points to the live portal.
 - [ ] `ORG_REGISTRATION_ALLOWED_ORIGINS` includes the exact portal origin(s).
 - [ ] `PRIVATE_MEDIA_ROOT` points to persistent private storage.
-- [ ] SMTP is configured; verification and join-request emails are not using
-      the console backend.
-- [ ] `EMAIL_BACKEND`, sender address and DNS records (SPF/DKIM/DMARC) are
-      verified.
-- [ ] Platform staff know how to review documents and write actionable rejection
-      notes.
+- [ ] `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, sender address and DNS records
+      (SPF/DKIM/DMARC) are verified.
+- [ ] `ORG_REVIEW_NOTIFY_EMAIL` is a monitored inbox; the Unfold sidebar badge
+      counts `pending_review` organizations even when email alerts are off.
+- [ ] `ORG_VERIFICATION_TOKEN_TTL_HOURS=24`,
+      `ORG_VERIFICATION_CODE_TTL_MINUTES=15` and
+      `ORG_VERIFICATION_RESEND_COOLDOWN_SECONDS=60` are set or defaults accepted.
+- [ ] At least one staff account has `core.view_analytics` (or is a superuser)
+      for the local admin analytics page; verification review itself uses the
+      normal organization model permissions.
+- [ ] Platform staff know how to review documents and write actionable notes.
 - [ ] Backups include the private media volume and the database.
 - [ ] Public `/media/` routing does **not** expose `private_media`.
 - [ ] Search returns no unverified organizations.
-- [ ] Smoke test: submit → receive email → confirm → staff approve → create a
-      student → approve a join request.
-- [ ] Smoke test rejection → portal shows reason → resubmit → pending again.
-- [ ] Smoke test changing a verified domain → status returns to unverified and
+- [ ] Smoke test: submit → receive email → confirm link → staff approve → create
+      a student → approve a join request.
+- [ ] Smoke test: submit → request code → wrong code five times → locked; resend
+      after cooldown → new code works.
+- [ ] Smoke test: rejection → portal shows reason → resubmit → pending review.
+- [ ] Smoke test: request more information → portal shows note → resubmit.
+- [ ] Smoke test: suspend → student growth blocked; existing members remain.
+- [ ] Smoke test: changing a verified domain → status returns to unverified and
       student creation is blocked.

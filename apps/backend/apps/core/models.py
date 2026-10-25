@@ -101,6 +101,9 @@ class ContentAuditLog(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        permissions = [
+            ("view_analytics", "Can view the analytics dashboard"),
+        ]
 
     def __str__(self):
         return f"{self.action} on {self.content_type} #{self.object_id} by {self.actor or 'system'}"

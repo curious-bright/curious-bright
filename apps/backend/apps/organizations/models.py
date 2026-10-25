@@ -9,6 +9,10 @@ from .storage import private_storage
 from .validators import validate_verification_document, verification_document_path
 
 
+def verification_token_expiry():
+    return timezone.now() + timezone.timedelta(hours=24)
+
+
 class Organization(models.Model):
     class OrgType(models.TextChoices):
         UNIVERSITY = "university", "University"
@@ -32,9 +36,11 @@ class Organization(models.Model):
 
     class VerificationStatus(models.TextChoices):
         UNVERIFIED = "unverified", "Unverified"
-        PENDING = "pending", "Pending review"
+        EMAIL_PENDING = "email_pending", "Email pending"
+        PENDING_REVIEW = "pending_review", "Pending admin review"
         VERIFIED = "verified", "Verified"
         REJECTED = "rejected", "Rejected"
+        SUSPENDED = "suspended", "Suspended"
 
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=80, unique=True, blank=True)
@@ -47,6 +53,7 @@ class Organization(models.Model):
         blank=True,
         help_text="Primary email domain, e.g. greenfield.edu",
     )
+    country = models.CharField(max_length=100, blank=True, default="")
     logo = models.FileField(upload_to="org-logos/%Y/%m/", null=True, blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_organizations"
@@ -66,12 +73,13 @@ class Organization(models.Model):
         help_text="Let verified organizations receive join requests from members.",
     )
     verification_status = models.CharField(
-        max_length=12,
+        max_length=20,
         choices=VerificationStatus.choices,
         default=VerificationStatus.UNVERIFIED,
         db_index=True,
     )
     verified_at = models.DateTimeField(null=True, blank=True)
+    suspension_reason = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -142,6 +150,16 @@ class OrganizationVerification(models.Model):
     official_email = models.EmailField()
     official_email_verified_at = models.DateTimeField(null=True, blank=True)
     official_email_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    official_email_token_expires_at = models.DateTimeField(
+        default=verification_token_expiry,
+        null=True,
+        blank=True,
+    )
+    official_email_code_hash = models.CharField(max_length=128, blank=True)
+    official_email_code_expires_at = models.DateTimeField(null=True, blank=True)
+    official_email_code_attempts = models.PositiveSmallIntegerField(default=0)
+    official_email_last_sent_at = models.DateTimeField(null=True, blank=True)
+    official_email_domain_matches = models.BooleanField(default=True)
     contact_name = models.CharField(max_length=120)
     contact_role = models.CharField(max_length=120)
     contact_email = models.EmailField()
@@ -160,6 +178,10 @@ class OrganizationVerification(models.Model):
         blank=True,
         help_text="Vice-Chancellor, Dean, Rector or equivalent for public institutions.",
     )
+    head_role = models.CharField(max_length=80, blank=True)
+    head_email = models.EmailField(blank=True)
+    info_requested_at = models.DateTimeField(null=True, blank=True)
+    info_request_note = models.TextField(blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(
@@ -184,15 +206,34 @@ class OrganizationVerification(models.Model):
     def official_email_verified(self):
         return self.official_email_verified_at is not None
 
+    @property
+    def head_name(self):
+        return self.head_of_institution
+
+    @head_name.setter
+    def head_name(self, value):
+        self.head_of_institution = value or ""
+
+    @property
+    def confirmation_token_expired(self):
+        return bool(
+            self.official_email_token_expires_at
+            and self.official_email_token_expires_at <= timezone.now()
+        )
+
 
 class OrganizationVerificationEvent(models.Model):
     class Action(models.TextChoices):
         SUBMITTED = "submitted", "Submitted"
         EMAIL_CONFIRMED = "email_confirmed", "Official email confirmed"
+        EMAIL_CHANGED = "email_changed", "Official email changed"
+        EMAIL_RESENT = "email_resent", "Confirmation email resent"
+        DOMAIN_CHANGED = "domain_changed", "Email domain changed"
+        INFO_REQUESTED = "info_requested", "More information requested"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
         RESUBMITTED = "resubmitted", "Resubmitted"
-        EMAIL_RESENT = "email_resent", "Confirmation email resent"
+        SUSPENDED = "suspended", "Suspended"
 
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="verification_events"

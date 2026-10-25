@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, apiVoid } from '../lib/api';
 import { useRealtime } from '../lib/realtime';
+import { track } from '../lib/analytics';
 import { useAuth } from './AuthContext';
 
 export type PostVisibility = 'public' | 'followers' | 'room_only';
@@ -296,6 +297,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         return current;
       }
 
+      if (next) track('follow', { source: 'feed' });
+
       if (!next) {
         // Unfollowing removes that author from the following feed, but the
         // member's own posts stay (they are always in their own feed).
@@ -313,6 +316,13 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    if (created) {
+      track('post_created', {
+        kind: created.kind,
+        subject: created.subject,
+        visibility: created.visibility,
+      });
+    }
     if (created && belongsInTab(created, tab)) {
       setPosts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
     }

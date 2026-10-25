@@ -46,7 +46,13 @@ class EmailAuthFlowTests(TestCase):
     def register(self, username="newmember", email="new@example.com", password=PASSWORD):
         return self.client.post(
             "/api/auth/register/",
-            {"username": username, "email": email, "password": password},
+            {
+                "username": username,
+                "email": email,
+                "password": password,
+                "accept_terms": True,
+                "accept_privacy": True,
+            },
             format="json",
         )
 
@@ -374,6 +380,8 @@ class ResendDeliveryTests(TestCase):
                             "username": "unlucky",
                             "email": "unlucky@example.com",
                             "password": PASSWORD,
+                            "accept_terms": True,
+                            "accept_privacy": True,
                         },
                         format="json",
                     )
@@ -412,6 +420,8 @@ class ResendDeliveryTests(TestCase):
                             "username": "templateluck",
                             "email": "templateluck@example.com",
                             "password": PASSWORD,
+                            "accept_terms": True,
+                            "accept_privacy": True,
                         },
                         format="json",
                     )

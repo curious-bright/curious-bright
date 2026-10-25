@@ -13,14 +13,26 @@ export default function Register() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !email.trim() || !password) return;
+    if (!acceptTerms || !acceptPrivacy) {
+      showError('Please accept the Terms of Use and Privacy Policy to create your account.');
+      return;
+    }
     setLoading(true);
     try {
-      const result = await register(username.trim(), email.trim(), password);
+      const result = await register(
+        username.trim(),
+        email.trim(),
+        password,
+        acceptTerms,
+        acceptPrivacy,
+      );
       try {
         sessionStorage.setItem('cb.pending_email', result.email);
       } catch {
@@ -109,10 +121,48 @@ export default function Register() {
             />
           </div>
 
+          <div className="policy-consent">
+            <label className="policy-consent-row">
+              <input
+                type="checkbox"
+                checked={acceptTerms}
+                onChange={e => setAcceptTerms(e.target.checked)}
+                required
+              />
+              <span>
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" rel="noopener noreferrer">
+                  Terms of Use
+                </Link>
+                .
+              </span>
+            </label>
+            <label className="policy-consent-row">
+              <input
+                type="checkbox"
+                checked={acceptPrivacy}
+                onChange={e => setAcceptPrivacy(e.target.checked)}
+                required
+              />
+              <span>
+                I have read and accept the{' '}
+                <Link to="/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </Link>
+                .
+              </span>
+            </label>
+            <p className="policy-consent-note">
+              We record the policy version and time of acceptance. To withdraw consent, email{' '}
+              <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a>;
+              withdrawing may mean closing your account.
+            </p>
+          </div>
+
           <button
             type="submit"
             className="btn btn-primary w-full mt-2"
-            disabled={loading || !username.trim() || !email.trim() || !password}
+            disabled={loading || !username.trim() || !email.trim() || !password || !acceptTerms || !acceptPrivacy}
             style={{ padding: '0.65rem', fontSize: '0.875rem' }}
           >
             {loading ? (

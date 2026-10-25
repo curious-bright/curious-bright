@@ -1,6 +1,17 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ArrowLeft, FileText, Users, Upload, AlertTriangle, Ban, Scale, RefreshCcw, Mail } from 'lucide-react';
+import {
+  BookOpen,
+  ArrowLeft,
+  FileText,
+  Users,
+  Upload,
+  AlertTriangle,
+  Ban,
+  Scale,
+  RefreshCcw,
+  Shield,
+} from 'lucide-react';
 import { colors } from '@curious-bright/ui-kit';
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
@@ -25,7 +36,6 @@ export const TermsOfUse: React.FC = () => {
 
   return (
     <div className="policy-page">
-      {/* Sticky Nav */}
       <header className="policy-nav">
         <div className="policy-nav-inner">
           <Link to="/" className="policy-nav-logo">
@@ -41,250 +51,263 @@ export const TermsOfUse: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Banner */}
       <div className="policy-hero">
         <div className="policy-hero-badge">
           <FileText size={14} />
           <span>TERMS OF USE</span>
         </div>
-        <h1>Rules of the Notebook</h1>
+        <h1>The rules of the notebook</h1>
         <p>
-          By accessing or using Curious Bright, you agree to these Terms of Use. Please read
-          them carefully. They are written in plain language — if anything is unclear, contact
-          us before using the platform.
+          These Terms govern your use of Curious Bright. They are written to be readable, but they
+          are a legal agreement. By creating an account, using the service, or creating an
+          organisation workspace, you agree to them.
         </p>
         <div className="policy-meta">
-          <span>Last updated: August 4, 2026</span>
+          <span>Version 2026-10-25</span>
           <span className="policy-meta-dot">•</span>
-          <span>Effective: August 4, 2026</span>
+          <span>Last updated: 25 October 2026</span>
+          <span className="policy-meta-dot">•</span>
+          <Link to="/privacy" style={{ color: 'var(--color-teal)' }}>Privacy Policy →</Link>
         </div>
       </div>
 
-      {/* Content */}
       <div className="policy-content">
+        <div
+          style={{
+            padding: '0.9rem 1rem',
+            border: '1.5px solid var(--color-mustard)',
+            background: 'rgba(244, 180, 61, 0.08)',
+            borderRadius: '4px',
+            color: 'var(--color-faded-ink)',
+            fontSize: '0.82rem',
+            lineHeight: 1.65,
+          }}
+        >
+          <strong style={{ color: 'var(--color-ink)' }}>Legal review required.</strong> This is a
+          working terms draft. The legal entity name, registered address, company registration
+          number and contact details are placeholders and must be completed and reviewed by
+          qualified Nigerian counsel before launch.
+        </div>
 
-        <Section icon={<Users size={18} />} title="1. Who Can Use Curious Bright">
+        <Section icon={<FileText size={18} />} title="1. The agreement">
           <p>
-            Curious Bright is an open-access platform designed for students (high school and above),
-            researchers, educators, and academic institutions. By registering, you confirm that:
+            These Terms of Use (“Terms”) are a binding agreement between you and{' '}
+            <strong>[LEGAL ENTITY NAME]</strong>, a company registered in Nigeria with registration
+            number <strong>[COMPANY REGISTRATION NUMBER]</strong> and registered address{' '}
+            <strong>[REGISTERED ADDRESS]</strong> (“Curious Bright”, “we”, “us” or “our”).
           </p>
-          <ul>
-            <li>You are at least 13 years old (or 16 in the European Economic Area).</li>
-            <li>
-              If you are under 18, you have obtained the consent of a parent or legal guardian.
-            </li>
-            <li>You will provide accurate information when creating your account.</li>
-            <li>You are responsible for maintaining the security of your credentials.</li>
-          </ul>
           <p>
-            We reserve the right to suspend or terminate accounts that provide false registration
-            information.
+            If you use Curious Bright on behalf of an institution, you confirm that you are
+            authorised to accept these Terms for that institution. The institution is responsible
+            for its members’ use of the workspace and for any student-data obligations that apply
+            to it. Our <Link to="/privacy">Privacy Policy</Link> forms part of these Terms.
           </p>
         </Section>
 
-        <Section icon={<Upload size={18} />} title="2. Content You Submit">
-          <p>
-            When you upload a manuscript, paper, or any document to Curious Bright ("Submitted
-            Content"), you represent and warrant that:
-          </p>
+        <Section icon={<Users size={18} />} title="2. Eligibility and accounts">
           <ul>
-            <li>
-              You are the original author, or you have obtained all necessary rights and permissions
-              to submit the content.
-            </li>
-            <li>
-              The content does not infringe any copyright, patent, trademark, trade secret, or
-              other intellectual property right of any third party.
-            </li>
-            <li>
-              The content is not defamatory, fraudulent, obscene, or otherwise unlawful.
-            </li>
-            <li>
-              The content does not contain personal data of third parties without their consent.
-            </li>
+            <li>You must be at least 13 years old (or 16 in the EEA/UK, unless local law permits a lower age with safeguards).</li>
+            <li>If you are under 18, you should use Curious Bright with the knowledge and, where required, consent of a parent or guardian.</li>
+            <li>You must provide accurate information and keep it up to date.</li>
+            <li>You are responsible for your password, devices and account activity. Do not share your credentials.</li>
+            <li>One person should not maintain multiple accounts to evade limits, bans or moderation.</li>
+            <li>We may require email verification and, for organisations, additional verification before certain features are unlocked.</li>
+          </ul>
+        </Section>
+
+        <Section icon={<Shield size={18} />} title="3. Institutional workspaces and verification">
+          <p>
+            Organisation owners and admins can create a workspace, invite members and request
+            verification. Verification may require a legal name, country, address, website,
+            official email address, registration number or document, and details of the head of
+            institution. We may review these details manually.
+          </p>
+          <p>Verification statuses include:</p>
+          <ul>
+            <li><strong>Unverified</strong> — no complete application has been submitted.</li>
+            <li><strong>Email Pending</strong> — the official email has not yet been confirmed.</li>
+            <li><strong>Pending Admin Review</strong> — the application is awaiting platform review.</li>
+            <li><strong>Verified</strong> — the application was approved; student features may be unlocked.</li>
+            <li><strong>Rejected</strong> — the application needs correction; the institution may resubmit.</li>
+            <li><strong>Suspended</strong> — access has been restricted for policy, fraud, safety or legal reasons.</li>
           </ul>
           <p>
-            By submitting content, you grant Curious Bright a{' '}
-            <strong>non-exclusive, royalty-free, worldwide license</strong> to host, cache, display,
-            and distribute your content on the platform for the purpose of providing the service.
-            You retain full ownership of your intellectual property.
+            Submitting false, misleading, expired or third-party documents is a serious violation.
+            We may reject, suspend or report an organisation, and we may preserve evidence where
+            necessary. Verification is not a guarantee of an institution’s quality, accreditation
+            or conduct.
+          </p>
+        </Section>
+
+        <Section icon={<Upload size={18} />} title="4. Content you submit">
+          <p>When you upload or publish content, you confirm that:</p>
+          <ul>
+            <li>You are the author or have all rights and permissions needed to share it.</li>
+            <li>It does not infringe copyright, trade marks, privacy, confidentiality or other rights.</li>
+            <li>It is not defamatory, fraudulent, obscene, hateful or otherwise unlawful.</li>
+            <li>You have consent for any third-party personal data it contains.</li>
+            <li>It does not contain malware or instructions for causing harm.</li>
+          </ul>
+          <p>
+            You keep ownership of your content. You grant Curious Bright a non-exclusive,
+            royalty-free, worldwide licence to host, store, cache, display, distribute and make
+            available the content you publish, and to create technical copies needed to operate the
+            service. This licence ends when the content is deleted, except for backups, legal
+            records, and content already shared or cited by others.
           </p>
           <p>
-            Approved submissions are published under an{' '}
+            Unless you state a different licence, published papers are made available under{' '}
             <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">
-              CC BY 4.0 license
-            </a>{' '}
-            by default, making them freely reusable with attribution. If you wish to publish under
-            a different open license, state it clearly in your submission.
-          </p>
-        </Section>
-
-        <Section icon={<AlertTriangle size={18} />} title="3. Community & Study Rooms">
-          <p>
-            Study Rooms are real-time collaborative spaces. By participating in Study Rooms, you
-            agree to:
-          </p>
-          <ul>
-            <li>Treat all participants with respect — harassment, hate speech, and personal attacks are not tolerated.</li>
-            <li>Not share another user's private information without their explicit consent.</li>
-            <li>Not use Study Rooms to coordinate academic dishonesty (e.g., exam cheating).</li>
-            <li>Not flood rooms with spam or automated messages.</li>
-            <li>Not impersonate other users, educators, or Curious Bright staff.</li>
-          </ul>
-          <p>
-            Room admins and platform moderators may remove messages, remove members, or close
-            rooms that violate these rules. Repeated violations may result in account suspension.
-          </p>
-        </Section>
-
-        <Section icon={<Ban size={18} />} title="4. Prohibited Uses">
-          <p>You agree <strong>not</strong> to:</p>
-          <ul>
-            <li>
-              Use the platform to transmit malware, viruses, or any malicious code.
-            </li>
-            <li>
-              Attempt to circumvent rate limiting, authentication, or access controls.
-            </li>
-            <li>
-              Scrape or harvest user data, content, or email addresses from the platform in bulk
-              without prior written consent.
-            </li>
-            <li>
-              Use the API, upload endpoints, or search functionality for commercial data aggregation
-              without a separate agreement.
-            </li>
-            <li>
-              Upload copyrighted textbooks or materials obtained illegally.
-            </li>
-            <li>
-              Create multiple accounts to evade a ban or circumvent submission limits.
-            </li>
-            <li>
-              Use the platform for any purpose that is illegal under applicable law.
-            </li>
-          </ul>
-        </Section>
-
-        <Section icon={<Scale size={18} />} title="5. Moderation & Enforcement">
-          <p>
-            Curious Bright uses a community moderation model supported by volunteer moderators
-            and administrators. Content is subject to review before publication.
-          </p>
-          <ul>
-            <li>
-              We reserve the right to reject, unpublish, or remove any content that violates these
-              Terms at our sole discretion.
-            </li>
-            <li>
-              Accounts may be suspended or permanently banned for serious or repeated violations.
-            </li>
-            <li>
-              You may report problematic content or users using the in-app report feature. False
-              reports made in bad faith may result in consequences for the reporting user.
-            </li>
-            <li>
-              Moderator decisions can be appealed by contacting{' '}
-              <a href="mailto:moderation@curiousbright.com.ng">moderation@curiousbright.com.ng</a>.
-            </li>
-          </ul>
-        </Section>
-
-        <Section icon={<FileText size={18} />} title="6. Open Source & Platform Code">
-          <p>
-            The Curious Bright platform source code is open source, licensed under the{' '}
-            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">
-              GNU General Public License v3 (GPL-3.0)
+              Creative Commons Attribution 4.0 (CC BY 4.0)
             </a>
-            . You are free to study, modify, and self-host the code under the terms of that license.
-          </p>
-          <p>
-            The Curious Bright name, logo, and branding are <strong>not</strong> covered by the
-            open-source license and may not be used without written permission to avoid confusion
-            with the official platform.
+            . You are responsible for ensuring that the licence you choose is consistent with the
+            rights you hold.
           </p>
         </Section>
 
-        <Section icon={<AlertTriangle size={18} />} title="7. Disclaimer of Warranties">
-          <p>
-            Curious Bright is provided <strong>"as is"</strong> and{' '}
-            <strong>"as available"</strong> without warranties of any kind, express or implied,
-            including but not limited to warranties of merchantability, fitness for a particular
-            purpose, or non-infringement.
-          </p>
-          <p>
-            We do not guarantee that the platform will be uninterrupted, error-free, or free of
-            viruses. Academic content published by users represents the views of the submitting
-            author and does not constitute endorsement by Curious Bright.
-          </p>
-        </Section>
-
-        <Section icon={<Scale size={18} />} title="8. Limitation of Liability">
-          <p>
-            To the fullest extent permitted by law, Curious Bright and its contributors shall not
-            be liable for any indirect, incidental, special, consequential, or punitive damages
-            arising from your use of, or inability to use, the platform — including loss of data,
-            revenue, or academic opportunities.
-          </p>
-          <p>
-            Our total liability for any direct claim shall not exceed the amount you paid for the
-            platform in the 12 months prior to the claim (which for free users is $0).
-          </p>
-        </Section>
-
-        <Section icon={<RefreshCcw size={18} />} title="9. Changes to These Terms">
-          <p>
-            We may update these Terms of Use from time to time as the platform evolves. When we
-            make material changes, we will:
-          </p>
+        <Section icon={<AlertTriangle size={18} />} title="5. Community and study rooms">
+          <p>When you use community spaces, rooms, messages or video, you agree to:</p>
           <ul>
-            <li>Post the revised Terms on this page with an updated "Last updated" date.</li>
-            <li>Send a notification to registered users via in-app alert.</li>
+            <li>Treat everyone with respect. Harassment, threats, hate speech, sexual exploitation and bullying are prohibited.</li>
+            <li>Do not share another person’s private information without their explicit permission.</li>
+            <li>Do not use the platform to cheat, plagiarise, impersonate, or coordinate academic dishonesty.</li>
+            <li>Do not spam, flood, scrape, automate, or attempt to overwhelm rooms or members.</li>
+            <li>Do not record or broadcast a call without the knowledge and consent of participants where required by law.</li>
+            <li>Follow room-specific rules and the reasonable instructions of moderators.</li>
           </ul>
           <p>
-            Continued use of Curious Bright after changes take effect constitutes your acceptance
-            of the revised Terms. If you do not agree to the new Terms, you should stop using the
-            platform and request account deletion.
+            Video and audio rooms are provided through LiveKit. We do not record calls by default.
+            Participants are responsible for complying with recording and consent laws in their
+            jurisdiction.
           </p>
         </Section>
 
-        <Section icon={<Scale size={18} />} title="10. Governing Law">
+        <Section icon={<Ban size={18} />} title="6. Prohibited uses">
+          <p>You must not:</p>
+          <ul>
+            <li>Break authentication, access controls, rate limits, or security features.</li>
+            <li>Upload malware, phishing content, or code designed to disrupt the service.</li>
+            <li>Scrape or harvest member data or content in bulk without written permission.</li>
+            <li>Use the API or upload features for unauthorised commercial data aggregation.</li>
+            <li>Upload textbooks, papers or datasets you obtained illegally or without permission.</li>
+            <li>Create accounts to evade a suspension, ban, seat limit or moderation decision.</li>
+            <li>Use the service to violate sanctions, export controls, privacy law or other applicable law.</li>
+            <li>Misrepresent your identity, affiliation, qualifications or authority to act for an institution.</li>
+          </ul>
+        </Section>
+
+        <Section icon={<Scale size={18} />} title="7. Moderation and enforcement">
           <p>
-            These Terms are governed by and construed in accordance with the laws of the Federal
-            Republic of Nigeria, without regard to its conflict-of-law provisions. Any disputes
-            arising from these Terms or your use of the platform shall be resolved through good-faith
-            negotiation first, and thereafter through the courts of Nigeria.
+            We may review, reject, unpublish, restrict or remove content; limit features; suspend
+            or terminate accounts or organisations; and preserve or report evidence where we
+            reasonably believe these Terms or the law have been violated. We aim to act
+            proportionately and to explain material decisions.
+          </p>
+          <p>
+            You can report content through the in-app report feature. Moderation appeals can be
+            sent to <a href="mailto:moderation@curiousbright.com.ng">moderation@curiousbright.com.ng</a>.
+            Verification decisions can be discussed with the review team at{' '}
+            <a href="mailto:verification@curiousbright.com.ng">verification@curiousbright.com.ng</a>.
           </p>
         </Section>
 
-        <Section icon={<Mail size={18} />} title="11. Contact Us">
+        <Section icon={<Scale size={18} />} title="8. Plans, payments and subscriptions">
+          <ul>
+            <li>Some features require a paid organisation plan. Prices, seat limits and features are shown at checkout and may change with notice.</li>
+            <li>Payments are processed by Paystack. You authorise us and Paystack to charge the agreed amount and applicable taxes.</li>
+            <li>Subscriptions renew according to the interval shown unless cancelled. Cancellation stops future renewals but does not automatically refund the current period.</li>
+            <li>We may suspend paid features if a payment fails, is reversed or is disputed.</li>
+            <li>Refunds are provided where required by law or expressly stated at purchase. Contact <a href="mailto:billing@curiousbright.com.ng">billing@curiousbright.com.ng</a>.</li>
+            <li>You are responsible for keeping billing contacts and organisation details accurate.</li>
+          </ul>
+        </Section>
+
+        <Section icon={<Shield size={18} />} title="9. Analytics and privacy choices">
           <p>
-            Questions about these Terms? Get in touch:
+            We use a self-hosted, cookieless Umami instance for coarse product analytics and our own
+            PostgreSQL database for aggregate administrator reporting. We honour Do Not Track and
+            Global Privacy Control. We do not send message bodies, names, email addresses, search
+            queries, document contents or payment details to analytics. See the{' '}
+            <Link to="/privacy">Privacy Policy</Link> for details and choices.
+          </p>
+        </Section>
+
+        <Section icon={<FileText size={18} />} title="10. Open source and branding">
+          <p>
+            Parts of the Curious Bright platform may be released under an open-source licence. Your
+            use of those components is governed by the applicable licence. The Curious Bright name,
+            logos, visual identity and domain names are not licensed for reuse without our prior
+            written permission, except for accurate references to the service.
+          </p>
+        </Section>
+
+        <Section icon={<AlertTriangle size={18} />} title="11. Disclaimers and liability">
+          <p>
+            Curious Bright is provided on an “as is” and “as available” basis. To the fullest extent
+            permitted by law, we disclaim implied warranties of merchantability, fitness for a
+            particular purpose, non-infringement, accuracy and uninterrupted availability. Academic
+            content, verification statuses and user statements represent the views or conduct of
+            their authors, not a guarantee or endorsement by Curious Bright.
+          </p>
+          <p>
+            To the fullest extent permitted by law, Curious Bright and its directors, employees,
+            contractors and partners will not be liable for indirect, incidental, special,
+            consequential or punitive damages, loss of profits, loss of data, loss of goodwill, or
+            business interruption arising from your use of the service. Our total aggregate
+            liability for direct claims relating to the service will not exceed the greater of (a)
+            the amount you paid to Curious Bright for the service in the twelve months before the
+            event giving rise to the claim, or (b) ₦50,000 (or the equivalent in your currency).
+            Nothing in these Terms excludes liability that cannot be excluded by law, including
+            liability for fraud or death/personal injury caused by negligence.
+          </p>
+        </Section>
+
+        <Section icon={<Shield size={18} />} title="12. Indemnity, termination and governing law">
+          <p>
+            You agree to indemnify and hold harmless Curious Bright and its personnel from claims,
+            losses, liabilities and reasonable costs arising from content you submit, your breach of
+            these Terms, your violation of law, or your infringement of another person’s rights.
+          </p>
+          <p>
+            You may stop using the service at any time and delete your account from Account
+            Settings. We may suspend or terminate access where you materially breach these Terms,
+            create risk, fail to pay, or where required by law. On termination, your right to use
+            the service ends; provisions that by their nature should survive will survive.
+          </p>
+          <p>
+            These Terms are governed by the laws of the Federal Republic of Nigeria, without regard
+            to conflict-of-law rules. Before starting formal proceedings, contact us at{' '}
+            <a href="mailto:legal@curiousbright.com.ng">legal@curiousbright.com.ng</a> and attempt
+            to resolve the dispute in good faith for at least 30 days. Subject to mandatory consumer
+            protections, disputes will be brought in the courts of competent jurisdiction in
+            Nigeria.
+          </p>
+        </Section>
+
+        <Section icon={<RefreshCcw size={18} />} title="13. Changes and contact">
+          <p>
+            We may update these Terms. When we make a material change, we will publish the new
+            version, update the version number and “Last updated” date, and ask signed-in members to
+            re-accept the updated Terms and Privacy Policy on their next visit. If you do not agree,
+            you may stop using the service and delete your account.
           </p>
           <ul>
-            <li>
-              <strong>General:</strong>{' '}
-              <a href="mailto:hello@curiousbright.com.ng">hello@curiousbright.com.ng</a>
-            </li>
-            <li>
-              <strong>Moderation appeals:</strong>{' '}
-              <a href="mailto:moderation@curiousbright.com.ng">moderation@curiousbright.com.ng</a>
-            </li>
-            <li>
-              <strong>Legal:</strong>{' '}
-              <a href="mailto:legal@curiousbright.com.ng">legal@curiousbright.com.ng</a>
-            </li>
+            <li><strong>General:</strong> <a href="mailto:hello@curiousbright.com.ng">hello@curiousbright.com.ng</a></li>
+            <li><strong>Legal:</strong> <a href="mailto:legal@curiousbright.com.ng">legal@curiousbright.com.ng</a></li>
+            <li><strong>Privacy:</strong> <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a></li>
+            <li><strong>Moderation appeals:</strong> <a href="mailto:moderation@curiousbright.com.ng">moderation@curiousbright.com.ng</a></li>
+            <li><strong>Billing:</strong> <a href="mailto:billing@curiousbright.com.ng">billing@curiousbright.com.ng</a></li>
+            <li><strong>Registered address:</strong> <strong>[REGISTERED ADDRESS]</strong></li>
           </ul>
         </Section>
 
         <div className="policy-footer-note">
-          These Terms of Use apply to all users of Curious Bright, including visitors who do not
-          register. By accessing any part of the platform, you acknowledge you have read and
-          understood these Terms.
+          By accessing or using Curious Bright, you acknowledge that you have read and understood
+          these Terms and agree to be bound by them. This draft is not legal advice and must be
+          reviewed by qualified counsel before it is relied on as the final public terms.
         </div>
       </div>
 
-      {/* Page footer */}
       <footer className="policy-page-footer">
         <p>© {new Date().getFullYear()} Curious Bright. Open Source &amp; Open Access.</p>
         <div className="policy-page-footer-links">
