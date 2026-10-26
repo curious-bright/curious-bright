@@ -42,3 +42,6 @@ private_media/
 cookies.txt
 /.txt
 
+
+# Qoder CLI session data
+.qoder/
