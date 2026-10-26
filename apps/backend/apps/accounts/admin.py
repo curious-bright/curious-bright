@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth import get_user_model
 
-from .models import Follow, Profile
+from .models import Follow, PolicyConsent, Profile
 
 User = get_user_model()
 
@@ -96,3 +96,28 @@ class FollowAdmin(admin.ModelAdmin):
     search_fields = ("follower__username", "followed__username")
     list_filter = ("created_at",)
     autocomplete_fields = ("follower", "followed")
+
+
+@admin.register(PolicyConsent)
+class PolicyConsentAdmin(admin.ModelAdmin):
+    list_display = ("user", "policy_type", "version", "organization", "accepted_at")
+    search_fields = ("user__username", "user__email", "version")
+    list_filter = ("policy_type", "version", "accepted_at")
+    readonly_fields = (
+        "user",
+        "organization",
+        "policy_type",
+        "version",
+        "accepted_at",
+        "ip_address",
+        "user_agent",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

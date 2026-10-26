@@ -1,0 +1,19 @@
+{% extends "emails/base.html" %}
+{% block title %}{{ org_name }} is verified on Curious Bright{% endblock %}
+{% block preheader %}Your organization is now verified.{% endblock %}
+{% block content %}
+<p class="cb-ink" style="margin:0 0 14px 0;color:#14141A;font-size:16px;line-height:1.65;">Hello,</p>
+<p class="cb-ink" style="margin:0 0 22px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  Good news — <strong>{{ org_name }}</strong> is now a verified institution on Curious Bright.
+</p>
+<p class="cb-ink" style="margin:0 0 24px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  You can now create student accounts, import rosters and invite members.
+</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+  <tr>
+    <td style="border-radius:9px;background-color:#FF5A36;">
+      <a href="{{ portal_url }}" style="display:inline-block;padding:13px 20px;color:#14141A;font-size:14px;font-weight:700;text-decoration:none;">Open the portal</a>
+    </td>
+  </tr>
+</table>
+{% endblock %}

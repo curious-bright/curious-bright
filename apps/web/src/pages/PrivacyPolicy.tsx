@@ -156,6 +156,11 @@ export default function PrivacyPolicy() {
         </Section>
 
         <Section icon="bx-target-lock" title="3. Why we use your data and our lawful bases">
+          <p>
+            We process personal data only when a lawful basis exists under the Nigeria Data
+            Protection Act 2023 (NDPA) and, where it applies to you, the EU General Data Protection
+            Regulation (GDPR) or UK GDPR. The bases we rely on are:
+          </p>
           <ul>
             <li>
               <strong>Provide the service (contract)</strong> — create and secure accounts, publish
@@ -378,7 +383,8 @@ export default function PrivacyPolicy() {
             Depending on your location, you may have the right to access, correct, delete, restrict
             or object to processing of your personal data; to data portability; to withdraw
             consent; and not to be subject to solely automated decisions with legal or similarly
-            significant effects. We do not make such automated decisions.
+            significant effects. These rights arise under the Nigeria Data Protection Act 2023 and,
+            where relevant, the GDPR/UK GDPR. We do not make such automated decisions.
           </p>
           <ul>
             <li>
@@ -402,9 +408,10 @@ export default function PrivacyPolicy() {
           </ul>
           <p>
             We aim to respond within 30 days. We may need to verify your identity before acting. If
-            you are in Nigeria, you can complain to the Nigeria Data Protection Commission (NDPC).
-            If you are in the EEA or UK, you can complain to your local supervisory authority or
-            the UK Information Commissioner’s Office.
+            you are in Nigeria, you can complain to the Nigeria Data Protection Commission (NDPC),
+            the regulator established under the Nigeria Data Protection Act 2023. If you are in the
+            EEA or UK, you can complain to your local supervisory authority or the UK Information
+            Commissioner’s Office.
           </p>
         </Section>
 

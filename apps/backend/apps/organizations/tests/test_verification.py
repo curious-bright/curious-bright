@@ -140,6 +140,26 @@ class OrganizationVerificationTests(TestCase):
             any("verified on Curious Bright" in message.subject for message in mail.outbox)
         )
 
+    def test_verification_emails_use_branded_templates(self):
+        self.submit()
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn("cb-card", html)
+        self.assertIn("Confirm official email", html)
+        self.assertIn(str(self.verification().official_email_token), html)
+        self.assertIn(self.email_code(), html)
+
+        verification = self.verification()
+        self.confirm(verification)
+        verification.refresh_from_db()
+        approve_verification(verification, self.owner, "Documents match.")
+        approved_html = next(
+            message.alternatives[0][0]
+            for message in mail.outbox
+            if "verified on Curious Bright" in message.subject
+        )
+        self.assertIn("cb-card", approved_html)
+        self.assertIn("Open the portal", approved_html)
+
     def test_confirmation_code_is_valid_and_single_use(self):
         self.submit()
         verification = self.verification()

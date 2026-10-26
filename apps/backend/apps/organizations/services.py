@@ -9,6 +9,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
@@ -212,31 +213,29 @@ def _code_matches(verification, code):
     return check_password(code, verification.official_email_code_hash)
 
 
-def _email_html(title, paragraphs, *, cta_label=None, cta_url=None, code=None):
-    parts = [
-        '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:560px;margin:auto">',
-        f"<h2 style=\"color:#172033\">{escape(title)}</h2>",
-    ]
-    for paragraph in paragraphs:
-        parts.append(f"<p>{escape(paragraph)}</p>")
-    if code:
-        parts.append(
-            '<p style="font-size:30px;letter-spacing:6px;font-weight:700;'
-            'background:#fff1ec;color:#c73214;padding:14px 18px;border-radius:10px;'
-            f'display:inline-block">{escape(code)}</p>'
+def _email_context(**extra):
+    app_url = (
+        getattr(settings, "APP_FRONTEND_URL", "") or "https://app.curiousbright.com.ng"
+    ).rstrip("/")
+    context = {
+        "support_email": getattr(settings, "SUPPORT_EMAIL", "support@curiousbright.com.ng"),
+        "logo_url": f"{app_url}/icon-192.png",
+    }
+    context.update(extra)
+    return context
+
+
+def _email_html(template_stem, context):
+    try:
+        return render_to_string(f"emails/{template_stem}.html", context)
+    except Exception as exc:
+        # Never log the context: it contains tokens and codes.
+        logger.warning(
+            "Organization email template render failed kind=%s error=%s",
+            template_stem,
+            type(exc).__name__,
         )
-    if cta_label and cta_url:
-        parts.append(
-            f'<p><a href="{escape(cta_url)}" style="display:inline-block;background:#ff5a36;'
-            'color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;'
-            f'font-weight:700">{escape(cta_label)}</a></p>'
-        )
-    parts.append(
-        '<p style="color:#64748b;font-size:12px">CuriousBright · '
-        "This is an automated message. Do not reply with verification codes.</p>"
-    )
-    parts.append("</div>")
-    return "".join(parts)
+        return None
 
 
 def send_verification_confirmation_email(verification, code=None):
@@ -255,15 +254,15 @@ def send_verification_confirmation_email(verification, code=None):
         "If you did not request this, you can ignore this email."
     )
     html = _email_html(
-        f"Confirm the official email for {org.name}",
-        [
-            f"We received a verification request for {org.name}.",
-            f"Confirm that {verification.official_email} belongs to your institution.",
-            f"This link expires in {ttl_hours} hours.",
-        ],
-        cta_label="Confirm official email",
-        cta_url=link,
-        code=code,
+        "org_verification_confirmation",
+        _email_context(
+            org_name=org.name,
+            official_email=verification.official_email,
+            confirm_url=link,
+            code=code,
+            ttl_hours=ttl_hours,
+            code_minutes=code_minutes,
+        ),
     )
     return _send(
         verification.official_email,
@@ -288,13 +287,8 @@ def send_verification_decision_email(organization, approved, note=""):
             f"Open the institutional portal: {base}"
         )
         html = _email_html(
-            f"{organization.name} is verified",
-            [
-                f"Good news — {organization.name} is now a verified institution.",
-                "You can now create student accounts, import rosters and invite members.",
-            ],
-            cta_label="Open the portal",
-            cta_url=base,
+            "org_verification_approved",
+            _email_context(org_name=organization.name, portal_url=base),
         )
     else:
         subject = f"Update on {organization.name} verification"
@@ -305,14 +299,8 @@ def send_verification_decision_email(organization, approved, note=""):
             f"{base}"
         )
         html = _email_html(
-            f"Update on {organization.name} verification",
-            [
-                f"Your verification request for {organization.name} was not approved.",
-                f"Reviewer note: {note or 'Please review your details and resubmit.'}",
-                "You can update the information and submit it again from the institutional portal.",
-            ],
-            cta_label="Update verification",
-            cta_url=base,
+            "org_verification_rejected",
+            _email_context(org_name=organization.name, note=note, portal_url=base),
         )
     return _send(
         owner.email,
@@ -337,14 +325,8 @@ def send_verification_info_request_email(organization, note):
         f"{base}"
     )
     html = _email_html(
-        f"More information needed for {organization.name}",
-        [
-            f"A reviewer needs more information before {organization.name} can be verified.",
-            f"Reviewer note: {note}",
-            "Sign in to the institutional portal, update your verification details, and resubmit.",
-        ],
-        cta_label="Update verification",
-        cta_url=base,
+        "org_verification_info_request",
+        _email_context(org_name=organization.name, note=note, portal_url=base),
     )
     return _send(
         owner.email,
@@ -370,15 +352,8 @@ def send_suspension_email(organization, note):
         "you believe this is a mistake."
     )
     html = _email_html(
-        f"{organization.name} verification suspended",
-        [
-            f"Verification for {organization.name} has been suspended.",
-            f"Reason: {note}",
-            "Existing memberships remain in place, but new invitations, student "
-            "accounts and join-request approvals are blocked.",
-            "Contact support@curiousbright.com.ng or your platform administrator if "
-            "you believe this is a mistake.",
-        ],
+        "org_verification_suspension",
+        _email_context(org_name=organization.name, note=note),
     )
     return _send(
         owner.email,
@@ -415,18 +390,19 @@ def send_admin_pending_review_email(verification):
         f"Review: {review_url}"
     )
     html = _email_html(
-        f"Organization awaiting review: {org.name}",
-        [
-            f"{org.name} confirmed its official email and is waiting for admin review.",
-            f"Legal name: {verification.legal_name}",
-            f"Type: {verification.get_org_type_display()}",
-            f"Country: {verification.country}",
-            f"Official email: {verification.official_email}",
-            "Official email matches website domain: "
-            f"{'yes' if verification.official_email_domain_matches else 'NO — check this'}",
-        ],
-        cta_label="Review in admin",
-        cta_url=review_url,
+        "org_admin_pending_review",
+        _email_context(
+            org_name=org.name,
+            legal_name=verification.legal_name,
+            org_type_display=verification.get_org_type_display(),
+            country=verification.country,
+            official_email=verification.official_email,
+            domain_mismatch=not verification.official_email_domain_matches,
+            domain_match_label=(
+                "yes" if verification.official_email_domain_matches else "NO — check this"
+            ),
+            review_url=review_url,
+        ),
     )
     return _send(
         recipient,

@@ -1,0 +1,42 @@
+{% extends "emails/base.html" %}
+{% block title %}Organization awaiting review: {{ org_name }}{% endblock %}
+{% block preheader %}{{ org_name }} is waiting for admin review.{% endblock %}
+{% block content %}
+<p class="cb-ink" style="margin:0 0 14px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  <strong>{{ org_name }}</strong> confirmed its official email and is waiting for admin review.
+</p>
+{% if domain_mismatch %}
+<p style="margin:0 0 18px 0;color:#C73214;font-size:14px;line-height:1.65;font-weight:700;">
+  Warning: the official email domain does not match the submitted website domain — check this before approving.
+</p>
+{% endif %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;border-collapse:collapse;">
+  <tr>
+    <td class="cb-muted" style="padding:6px 0;color:#6B685C;font-size:14px;border-bottom:1px solid #E2DFC9;">Legal name</td>
+    <td class="cb-ink" style="padding:6px 0;color:#14141A;font-size:14px;border-bottom:1px solid #E2DFC9;text-align:right;">{{ legal_name }}</td>
+  </tr>
+  <tr>
+    <td class="cb-muted" style="padding:6px 0;color:#6B685C;font-size:14px;border-bottom:1px solid #E2DFC9;">Type</td>
+    <td class="cb-ink" style="padding:6px 0;color:#14141A;font-size:14px;border-bottom:1px solid #E2DFC9;text-align:right;">{{ org_type_display }}</td>
+  </tr>
+  <tr>
+    <td class="cb-muted" style="padding:6px 0;color:#6B685C;font-size:14px;border-bottom:1px solid #E2DFC9;">Country</td>
+    <td class="cb-ink" style="padding:6px 0;color:#14141A;font-size:14px;border-bottom:1px solid #E2DFC9;text-align:right;">{{ country }}</td>
+  </tr>
+  <tr>
+    <td class="cb-muted" style="padding:6px 0;color:#6B685C;font-size:14px;border-bottom:1px solid #E2DFC9;">Official email</td>
+    <td class="cb-ink" style="padding:6px 0;color:#14141A;font-size:14px;border-bottom:1px solid #E2DFC9;text-align:right;word-break:break-all;">{{ official_email }}</td>
+  </tr>
+  <tr>
+    <td class="cb-muted" style="padding:6px 0;color:#6B685C;font-size:14px;">Email matches website domain</td>
+    <td class="cb-ink" style="padding:6px 0;color:#14141A;font-size:14px;text-align:right;">{{ domain_match_label }}</td>
+  </tr>
+</table>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+  <tr>
+    <td style="border-radius:9px;background-color:#FF5A36;">
+      <a href="{{ review_url }}" style="display:inline-block;padding:13px 20px;color:#14141A;font-size:14px;font-weight:700;text-decoration:none;">Review in admin</a>
+    </td>
+  </tr>
+</table>
+{% endblock %}

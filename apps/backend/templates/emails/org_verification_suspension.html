@@ -1,0 +1,20 @@
+{% extends "emails/base.html" %}
+{% block title %}{{ org_name }} verification suspended{% endblock %}
+{% block preheader %}Your organization verification has been suspended.{% endblock %}
+{% block content %}
+<p class="cb-ink" style="margin:0 0 14px 0;color:#14141A;font-size:16px;line-height:1.65;">Hello,</p>
+<p class="cb-ink" style="margin:0 0 22px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  Verification for <strong>{{ org_name }}</strong> has been suspended.
+</p>
+<p class="cb-ink" style="margin:0 0 22px 0;color:#14141A;font-size:16px;line-height:1.65;">
+  <strong>Reason:</strong> {{ note }}
+</p>
+<p class="cb-muted" style="margin:0 0 18px 0;color:#6B685C;font-size:14px;line-height:1.65;">
+  Existing memberships remain in place, but new invitations, student accounts and
+  join-request approvals are blocked.
+</p>
+<p class="cb-muted" style="margin:0;color:#6B685C;font-size:14px;line-height:1.65;">
+  Contact <a href="mailto:{{ support_email|default:'support@curiousbright.com.ng' }}" style="color:#00A896;text-decoration:underline;">{{ support_email|default:'support@curiousbright.com.ng' }}</a>
+  or your platform administrator if you believe this is a mistake.
+</p>
+{% endblock %}
