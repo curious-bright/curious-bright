@@ -26,5 +26,12 @@
   "engines": {
     "node": ">=18"
   },
+  "pnpm": {
+    "overrides": {
+      "react-pdf>@types/react": "^18.3.0",
+      "react-router>@types/react": "^18.3.0",
+      "react-router-dom>@types/react": "^18.3.0"
+    }
+  },
   "packageManager": "pnpm@9.0.0"
 }
