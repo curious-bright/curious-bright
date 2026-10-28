@@ -9,6 +9,7 @@ import {
   setTokens,
 } from '../lib/api';
 import { track } from '../lib/analytics';
+import type { GoogleAuthPayload } from '../lib/googleOAuth';
 
 export interface BadgeInfo {
   code: string;
@@ -90,6 +91,7 @@ interface AuthContextValue {
   loading: boolean;
   isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<Me>;
+  setGoogleSession: (payload: GoogleAuthPayload) => Promise<Me>;
   register: (
     username: string,
     email: string,
@@ -179,6 +181,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(me);
         setLoading(false);
         localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
+        broadcastAuthChange();
+        return me;
+      } catch (error) {
+        clearTokens();
+        setUser(null);
+        throw error;
+      }
+    },
+    [broadcastAuthChange],
+  );
+
+  const setGoogleSession = useCallback(
+    async (payload: GoogleAuthPayload): Promise<Me> => {
+      try {
+        setTokens(payload.access, payload.refresh);
+        const me = await apiFetchStrict<Me>('/auth/me/');
+        setUser(me);
+        setLoading(false);
+        localStorage.setItem('user', JSON.stringify({ id: me.id, name: me.username, email: me.email }));
+        track(payload.created ? 'sign_up' : 'login', { method: 'google' });
         broadcastAuthChange();
         return me;
       } catch (error) {
@@ -303,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       isAuthenticated: !!user,
       login,
+      setGoogleSession,
       register,
       verifyEmail,
       acceptPolicies,
@@ -315,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       loading,
       login,
+      setGoogleSession,
       register,
       verifyEmail,
       acceptPolicies,

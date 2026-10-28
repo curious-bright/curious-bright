@@ -476,6 +476,15 @@ BILLING_CALLBACK_URL = env(
     "BILLING_CALLBACK_URL", f"{ORG_FRONTEND_URL.rstrip('/')}/billing/verify"
 )
 
+# Google OAuth (authorization-code + PKCE). Leave the credentials blank to
+# disable the endpoint; the web client hides its buttons when it has no client
+# ID configured.
+GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = env(
+    "GOOGLE_REDIRECT_URI", f"{APP_FRONTEND_URL.rstrip('/')}/auth/google/callback"
+)
+
 # Organization verification review notifications. The badge in the admin is
 # always live; this address is the extra email alert.
 ORG_REVIEW_NOTIFY_EMAIL = env("ORG_REVIEW_NOTIFY_EMAIL", SUPPORT_EMAIL)

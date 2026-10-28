@@ -5,6 +5,7 @@ import { ApiError } from '../lib/api';
 import { showError, showSuccess } from '../lib/errorBus';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
+import GoogleButton from '../components/GoogleButton';
 import iconMark from '../assets/icon-mark.svg';
 
 export default function Register() {
@@ -178,6 +179,17 @@ export default function Register() {
             )}
           </button>
         </form>
+
+        <div className="mt-4">
+          <GoogleButton
+            label="Sign up with Google"
+            returnTo={new URLSearchParams(window.location.search).get('next') || '/feed'}
+          />
+          <p className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.5rem', textAlign: 'center' }}>
+            By continuing with Google you accept the Terms of Use and Privacy Policy; we record that
+            consent.
+          </p>
+        </div>
 
         <div className="text-center mt-4 pt-3" style={{ borderTop: '1.5px solid var(--color-line)', fontSize: '0.8125rem' }}>
           <span className="text-muted">Already a member? </span>

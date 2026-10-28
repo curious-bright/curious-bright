@@ -36,6 +36,7 @@ import Search from './pages/Search';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfUse from './pages/TermsOfUse';
 import PaymentVerify from './pages/PaymentVerify';
+import GoogleCallback from './pages/GoogleCallback';
 import Feed from './pages/Feed';
 import PostDetail from './pages/PostDetail';
 import Profile from './pages/Profile';
@@ -139,6 +140,7 @@ function AppShell() {
                       <Route path="/verify-email" element={<VerifyEmail />} />
                       <Route path="/forgot-password" element={<ForgotPassword />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
+                      <Route path="/auth/google/callback" element={<GoogleCallback />} />
                       <Route path="/feed" element={<Feed />} />
                       <Route path="/post/:id" element={<PostDetail />} />
                       <Route path="/profile/:username" element={<Profile />} />

@@ -67,7 +67,7 @@ async function parseError(response: Response): Promise<ApiError> {
     const body = await response.json();
     if (body && typeof body === 'object') {
       code = body.code || code;
-      message = body.message || message;
+      message = body.message || body.detail || message;
     }
   } catch {
     // non-JSON error body (e.g. HTML page) — keep defaults

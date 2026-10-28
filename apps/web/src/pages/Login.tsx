@@ -5,6 +5,7 @@ import { ApiError } from '../lib/api';
 import { showError, showInfo } from '../lib/errorBus';
 import { CommentCornerCard } from '../components/CommentCornerCard';
 import { HighlighterText } from '../components/HighlighterText';
+import GoogleButton from '../components/GoogleButton';
 import iconMark from '../assets/icon-mark.svg';
 
 export default function Login() {
@@ -104,6 +105,8 @@ export default function Login() {
             )}
           </button>
         </form>
+
+        <GoogleButton returnTo="/feed" />
 
         <div className="text-center mt-4 pt-3" style={{ borderTop: '1.5px solid var(--color-line)', fontSize: '0.8125rem' }}>
           <span className="text-muted">New here? </span>
