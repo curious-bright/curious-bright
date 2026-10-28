@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /about
+Allow: /login
+Allow: /register
+Allow: /privacy
+Allow: /terms
+Disallow: /feed
+Disallow: /messages
+Disallow: /notifications
+Disallow: /settings
+Disallow: /submit
+Disallow: /browse
+Disallow: /moderate
+Disallow: /join-organization
+Disallow: /room/
+Disallow: /post/
+Disallow: /profile/
+Disallow: /read/
+Disallow: /research/
+
+Sitemap: https://app.curiousbright.com.ng/sitemap.xml

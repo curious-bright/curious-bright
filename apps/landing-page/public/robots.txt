@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://curiousbright.com.ng/sitemap.xml
+Sitemap: https://app.curiousbright.com.ng/sitemap.xml
