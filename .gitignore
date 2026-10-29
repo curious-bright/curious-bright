@@ -5,9 +5,11 @@ node_modules/
 dist/
 .next/
 
-# Environment files
+# Environment files: real values are never committed, templates always are.
 .env
-.env.local
+.env.*
+!.env.example
+!.env.template
 
 # IDE
 .vscode/
