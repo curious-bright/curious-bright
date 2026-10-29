@@ -57,9 +57,9 @@ export default function TermsOfUse() {
             flexWrap: 'wrap',
           }}
         >
-          <span>Version 2026-10-25</span>
+          <span>Version 2026-10-28</span>
           <span style={{ opacity: 0.4 }}>•</span>
-          <span>Last updated: 25 October 2026</span>
+          <span>Last updated: 28 October 2026</span>
           <span style={{ opacity: 0.4 }}>•</span>
           <Link to="/privacy" style={{ color: 'var(--color-teal)', textDecoration: 'none' }}>
             View Privacy Policy →
@@ -67,30 +67,17 @@ export default function TermsOfUse() {
         </div>
       </div>
 
-      <div
-        className="policy-review-note"
-        style={{
-          marginBottom: '1.25rem',
-          padding: '0.9rem 1rem',
-          border: '1.5px solid var(--color-mustard)',
-          background: 'rgba(244, 180, 61, 0.08)',
-          borderRadius: '4px',
-          fontSize: '0.8rem',
-          lineHeight: 1.6,
-        }}
-      >
-        <strong>Legal review required.</strong> This is a working terms draft. The legal entity
-        name, registered address, governing-law details and contact details are placeholders and
-        must be completed and reviewed by qualified Nigerian counsel before launch.
-      </div>
-
       <div className="policy-sections">
         <Section icon="bx-file" title="1. The agreement">
           <p>
-            These Terms of Use (“Terms”) are a binding agreement between you and{' '}
-            <strong>[LEGAL ENTITY NAME]</strong>, a company registered in Nigeria with registration
-            number <strong>[COMPANY REGISTRATION NUMBER]</strong> and registered address{' '}
-            <strong>[REGISTERED ADDRESS]</strong> (“Curious Bright”, “we”, “us” or “our”).
+            These Terms of Use (“Terms”) are a binding agreement between you and the Curious Bright
+            development team, an early-stage product operating from{' '}
+            <a href="https://curiousbright.com.ng">curiousbright.com.ng</a> in Nigeria (“Curious
+            Bright”, “we”, “us” or “our”). We are not yet incorporated as a limited liability
+            company; when registration completes we will publish our registered legal name,
+            registration number and postal address here and notify you of the change. For legal or
+            formal notices, email{' '}
+            <a href="mailto:legal@curiousbright.com.ng">legal@curiousbright.com.ng</a>.
           </p>
           <p>
             If you use Curious Bright on behalf of an institution, you confirm that you are
@@ -110,6 +97,12 @@ export default function TermsOfUse() {
             <li>If you are under 18, you should use Curious Bright with the knowledge and, where required, consent of a parent or guardian.</li>
             <li>You must provide accurate information and keep it up to date.</li>
             <li>You are responsible for your password, devices and account activity. Do not share your credentials.</li>
+            <li>
+              You may sign in with Google. When you do, Google authenticates you and shares your
+              name, email address and profile picture with us as described in our{' '}
+              <Link to="/privacy">Privacy Policy</Link>; your Google account itself remains governed
+              by Google’s Terms of Service.
+            </li>
             <li>One person should not maintain multiple accounts to evade limits, bans or moderation.</li>
             <li>We may require email verification and, for organisations, additional verification before certain features are unlocked.</li>
           </ul>
@@ -325,14 +318,14 @@ export default function TermsOfUse() {
             <li><strong>Privacy:</strong> <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a></li>
             <li><strong>Moderation appeals:</strong> <a href="mailto:moderation@curiousbright.com.ng">moderation@curiousbright.com.ng</a></li>
             <li><strong>Billing:</strong> <a href="mailto:billing@curiousbright.com.ng">billing@curiousbright.com.ng</a></li>
-            <li><strong>Registered address:</strong> <strong>[REGISTERED ADDRESS]</strong></li>
+            <li><strong>Service:</strong> <a href="https://curiousbright.com.ng">curiousbright.com.ng</a>, operated from Nigeria. Our registered postal address will be published here once incorporation completes.</li>
           </ul>
         </Section>
 
         <div className="policy-footer-note">
           By accessing or using Curious Bright, you acknowledge that you have read and understood
-          these Terms and agree to be bound by them. This draft is not legal advice and must be
-          reviewed by qualified counsel before it is relied on as the final public terms.
+          these Terms and agree to be bound by them. If you do not agree, please stop using the
+          service and contact us if you need anything clarified.
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', paddingTop: '0.5rem', flexWrap: 'wrap' }}>

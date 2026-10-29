@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 dist/
 .next/
+.prerender/
 
 # Environment files: real values are never committed, templates always are.
 .env

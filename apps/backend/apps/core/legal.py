@@ -8,9 +8,9 @@ changes; every signed-in user will then be asked to re-accept on next use.
 
 from __future__ import annotations
 
-CURRENT_TERMS_VERSION = "2026-10-25"
-CURRENT_PRIVACY_VERSION = "2026-10-25"
-LEGAL_LAST_UPDATED = "25 October 2026"
+CURRENT_TERMS_VERSION = "2026-10-28"
+CURRENT_PRIVACY_VERSION = "2026-10-28"
+LEGAL_LAST_UPDATED = "28 October 2026"
 
 
 def current_versions() -> dict:

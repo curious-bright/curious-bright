@@ -27,17 +27,23 @@ function HomePage() {
   );
 }
 
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfUse />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <AnalyticsTracker />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<TermsOfUse />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppRoutes />
     </BrowserRouter>
   );
 }

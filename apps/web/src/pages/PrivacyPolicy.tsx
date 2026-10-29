@@ -57,9 +57,9 @@ export default function PrivacyPolicy() {
             flexWrap: 'wrap',
           }}
         >
-          <span>Version 2026-10-25</span>
+          <span>Version 2026-10-28</span>
           <span style={{ opacity: 0.4 }}>•</span>
-          <span>Last updated: 25 October 2026</span>
+          <span>Last updated: 28 October 2026</span>
           <span style={{ opacity: 0.4 }}>•</span>
           <Link to="/terms" style={{ color: 'var(--color-teal)', textDecoration: 'none' }}>
             View Terms of Use →
@@ -67,43 +67,32 @@ export default function PrivacyPolicy() {
         </div>
       </div>
 
-      <div
-        className="policy-review-note"
-        style={{
-          marginBottom: '1.25rem',
-          padding: '0.9rem 1rem',
-          border: '1.5px solid var(--color-mustard)',
-          background: 'rgba(244, 180, 61, 0.08)',
-          borderRadius: '4px',
-          fontSize: '0.8rem',
-          lineHeight: 1.6,
-        }}
-      >
-        <strong>Legal review required.</strong> This is a working policy draft prepared for the
-        Curious Bright platform. The legal entity name, registered address, company registration
-        number and Data Protection Officer details are placeholders and must be completed and
-        reviewed by qualified Nigerian and, where relevant, EU/UK privacy counsel before launch.
-      </div>
-
       <div className="policy-sections">
         <Section icon="bx-buildings" title="1. Who is responsible for your data">
           <p>
-            Curious Bright is operated by <strong>[LEGAL ENTITY NAME]</strong>, a company
-            registered in Nigeria with registration number <strong>[COMPANY REGISTRATION NUMBER]</strong>{' '}
-            and registered address <strong>[REGISTERED ADDRESS]</strong> (“Curious Bright”, “we”,
-            “us” or “our”). We are the data controller for the personal data described in this
-            policy, except where an institution uses the platform to process student or staff data
-            on its own behalf.
+            Curious Bright is an early-stage academic platform designed and operated by the Curious
+            Bright development team based in Nigeria (<a href="https://curiousbright.com.ng">curiousbright.com.ng</a>,
+            “Curious Bright”, “we”, “us” or “our”). We are the data controller for the personal data
+            described in this policy, except where an institution uses the platform to process
+            student or staff data on its own behalf — in that case the institution is the controller
+            and we act as its processor.
+          </p>
+          <p>
+            We are not yet incorporated as a limited liability company, so there is no company
+            registration number to publish. When our registration completes we will add the
+            registered legal name, registration number and registered postal address to this section
+            and notify members of the change.
           </p>
           <p>
             Contact for privacy questions, rights requests and complaints:{' '}
             <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a>.
           </p>
           <p>
-            Data Protection Officer: <strong>[DPO NAME]</strong>,{' '}
-            <a href="mailto:dpo@curiousbright.com.ng">dpo@curiousbright.com.ng</a>. Postal address:{' '}
-            <strong>[DPO POSTAL ADDRESS]</strong>. These details are placeholders until the DPO
-            appointment is confirmed.
+            Data Protection Officer: <a href="mailto:dpo@curiousbright.com.ng">dpo@curiousbright.com.ng</a>.
+            We do not publish the DPO’s name for privacy reasons, but the mailbox is monitored by a
+            named individual accountable for our data protection programme, and we will identify
+            them to you or to a regulator on request. Security issues:{' '}
+            <a href="mailto:security@curiousbright.com.ng">security@curiousbright.com.ng</a>.
           </p>
         </Section>
 
@@ -111,9 +100,14 @@ export default function PrivacyPolicy() {
           <p>We collect only what is needed to run a learning and research community:</p>
           <ul>
             <li>
-              <strong>Account data</strong> — username, email address, password hash, profile
-              photo, bio, school or organisation, country, subject expertise, and account
-              preferences.
+              <strong>Account data</strong> — username, email address, password hash (or the fact
+              that you sign in with Google, see below), profile photo, bio, school or organisation,
+              country, subject expertise, and account preferences.
+            </li>
+            <li>
+              <strong>Google sign-in data</strong> — if you choose “Continue with Google”: your
+              Google account name, email address, profile picture and a stable Google user
+              identifier. We never receive or store your Google password.
             </li>
             <li>
               <strong>Authentication and security data</strong> — verification codes and their
@@ -152,6 +146,40 @@ export default function PrivacyPolicy() {
             We do not intentionally collect special-category data (such as health, religious or
             biometric data) through the platform. Do not upload another person’s personal data
             unless you have a lawful basis and their permission where required.
+          </p>
+          <p>
+            <strong>Signing in with Google.</strong> Google sign-in is optional and you can always
+            register with an email address and password instead. We request only the OpenID Connect{' '}
+            <code>openid</code>, <code>email</code> and <code>profile</code> scopes, and with your
+            explicit authorisation Google tells us your name, email address, whether Google has
+            verified that address, a profile picture URL and a unique Google user ID. We use that
+            information only to create your account, sign you in, prefill your display name and
+            avatar, and recognise an existing account that uses the same email address. The exchange
+            uses the authorisation-code flow with PKCE, so the code Google issues is verified
+            server-side and cannot be replayed from another device.
+          </p>
+          <p>
+            We do not request, receive or store data from Gmail, Drive, Contacts, Calendar, YouTube
+            or any other Google service; we keep no Google access or refresh token for ongoing
+            access; we do not act on your behalf at Google after sign-in; and we do not use your
+            Google information for advertising, cross-site tracking or profiling. Your event data
+            records only that an account used Google as its sign-in method, never the Google account
+            itself. You can revoke our access at any time in your Google Account under “Data &amp;
+            privacy” →{' '}
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+              third-party sites and apps with access to your account
+            </a>{' '}
+            — set a Curious Bright password first if you plan to do that. Revoking access does not
+            delete your Curious Bright account. Your choice to share data with us through Google is
+            also governed by Google’s{' '}
+            <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
+              Privacy Policy
+            </a>
+            .
           </p>
         </Section>
 
@@ -265,6 +293,12 @@ export default function PrivacyPolicy() {
           <p>We use carefully selected processors and infrastructure providers, including:</p>
           <ul>
             <li>
+              <strong>Identity provider — Google</strong>, if you choose Sign in with Google. Google
+              authenticates you and, with your authorisation, shares your name, email address,
+              email-verification status, profile picture and Google user ID with us. Google’s
+              privacy policy applies to that exchange, and we never receive your Google password.
+            </li>
+            <li>
               <strong>Hosting and network</strong> — our cloud host and Cloudflare for DNS, TLS,
               caching, WAF and DDoS protection.
             </li>
@@ -316,6 +350,10 @@ export default function PrivacyPolicy() {
         <Section icon="bx-lock-alt" title="9. How we protect your data">
           <ul>
             <li>Passwords are stored as one-way hashes, never in plain text.</li>
+            <li>
+              Accounts created through Google sign-in have no password on our servers at all; Google
+              is the authentication authority for them and we store no Google credential.
+            </li>
             <li>
               Authentication uses short-lived access tokens and refresh tokens; tokens are stored
               in browser local storage and sent over HTTPS.
@@ -477,9 +515,9 @@ export default function PrivacyPolicy() {
         </Section>
 
         <div className="policy-footer-note">
-          This draft is provided for transparency and product development. It is not legal advice.
-          The placeholders for the legal entity, address and DPO must be completed, and the policy
-          must be reviewed by qualified counsel before it is relied on as the final public policy.
+          This policy is written for our members first. If any part of it is unclear, email{' '}
+          <a href="mailto:privacy@curiousbright.com.ng">privacy@curiousbright.com.ng</a> and we will
+          explain it plainly, in writing, on request.
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', paddingTop: '0.5rem', flexWrap: 'wrap' }}>
