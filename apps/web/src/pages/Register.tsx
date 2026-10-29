@@ -196,11 +196,6 @@ export default function Register() {
           <Link to="/login" style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
             Sign in
           </Link>
-          <div className="mt-2">
-            <Link to="/verify-email" style={{ color: 'var(--color-faded-ink)', fontWeight: 600 }}>
-              Already registered but not verified?
-            </Link>
-          </div>
         </div>
       </CommentCornerCard>
     </div>

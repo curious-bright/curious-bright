@@ -113,11 +113,6 @@ export default function Login() {
           <Link to="/register" style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
             Create an account
           </Link>
-          <div className="mt-2">
-            <Link to="/verify-email" style={{ color: 'var(--color-faded-ink)', fontWeight: 600 }}>
-              Already registered? Verify your email
-            </Link>
-          </div>
         </div>
       </CommentCornerCard>
     </div>
