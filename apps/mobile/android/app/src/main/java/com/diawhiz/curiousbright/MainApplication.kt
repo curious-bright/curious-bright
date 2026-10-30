@@ -1,4 +1,4 @@
-package com.curiousbright
+package com.diawhiz.curiousbright
 
 import android.app.Application
 import android.content.res.Configuration
