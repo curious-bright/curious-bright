@@ -1,199 +1,283 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { apiFetch } from '../src/lib/api';
-import { SubmissionSchema } from '@curious-bright/validation';
-import * as SecureStore from 'expo-secure-store';
+import { File } from 'expo-file-system';
+import { useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenHeader } from '../src/components/layout/ScreenHeader';
+import { Button } from '../src/components/ui/Button';
+import { Field } from '../src/components/ui/Field';
+import { showDanger, showInfo, showSuccess } from '../src/components/ui/Toast';
+import { apiFetchStrict } from '../src/lib/api';
+import { belongsInTab, upsertInFeed } from '../src/lib/feedCache';
+import { ACADEMIC_LEVELS, SUBJECTS, subjectColor } from '../src/lib/subjects';
+import { useAuth } from '../src/state/AuthContext';
+import { fontSize, fonts, radii, spacing, useTheme } from '../src/theme';
+import type { FeedPost } from '../src/lib/types';
+
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+
+interface PickedFile {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+}
 
 export default function SubmitScreen() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [subject, setSubject] = useState('general');
+  const [level, setLevel] = useState('high_school');
+  const [file, setFile] = useState<PickedFile | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const pickDocument = async () => {
+  const pickPdf = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets.length) return;
+    const asset = result.assets[0];
+    let size: number | null = null;
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled) return;
-      setFile(result.assets[0]);
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to pick document');
+      size = new File(asset.uri).size;
+    } catch {
+      size = asset.size ?? null;
     }
+    if (size != null && size > MAX_PDF_BYTES) {
+      showDanger('PDFs are limited to 25 MB.');
+      return;
+    }
+    setFile({
+      uri: asset.uri,
+      name: asset.name,
+      mimeType: asset.mimeType || 'application/pdf',
+      size,
+    });
   };
 
-  const handleSubmit = async () => {
-    if (!title || !description || !file) {
-      Alert.alert('Error', 'Please fill in all fields and select a file');
-      return;
-    }
+  const canSubmit = title.trim().length > 2 && description.trim().length > 0 && !!file && !!user;
 
+  const submit = async () => {
+    if (!canSubmit || busy) return;
+    setBusy(true);
     try {
-      SubmissionSchema.omit({ fileUrl: true }).parse({ 
-        title, 
-        description,
-        academicLevel: 'HIGH_SCHOOL',
-        license: 'CC-BY-4.0'
-      });
-    } catch (error: any) {
-      Alert.alert('Validation Error', error.errors?.[0]?.message || 'Invalid input');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token = await SecureStore.getItemAsync('token');
-      if (!token) throw new Error('Not authenticated');
-
-      // 1. Get presigned URL
-      const { uploadUrl, fileKey } = await apiFetch('/submissions/presigned-url', {
-        method: 'POST',
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.mimeType || 'application/pdf',
-        }),
-      });
-
-      // 2. Upload file to S3
-      const fileResponse = await fetch(file.uri);
-      const blob = await fileResponse.blob();
-      
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: {
-          'Content-Type': file.mimeType || 'application/pdf',
-        },
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file to S3');
+      const form = new FormData();
+      form.append('title', title.trim());
+      form.append('body', description.trim());
+      form.append('kind', 'resource');
+      form.append('subject', subject);
+      form.append('academic_level', level);
+      form.append('attachment', {
+        uri: file!.uri,
+        name: file!.name,
+        type: file!.mimeType,
+      } as unknown as Blob);
+      const created = await apiFetchStrict<FeedPost>('/posts/', { method: 'POST', body: form });
+      if (belongsInTab(created, 'discover', user?.username)) upsertInFeed(qc, 'discover', created);
+      if (belongsInTab(created, 'following', user?.username)) upsertInFeed(qc, 'following', created);
+      qc.invalidateQueries({ queryKey: ['browse'] });
+      qc.invalidateQueries({ queryKey: ['profile-posts'] });
+      if (created.review_status && created.review_status !== 'published') {
+        showInfo('Filed for review — it will appear once a moderator approves it.');
+      } else {
+        showSuccess('Resource shared.');
       }
-
-      // 3. Create submission
-      await apiFetch('/submissions', {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          description,
-          fileKey,
-        }),
-      });
-
-      Alert.alert('Success', 'Document submitted successfully for review');
       router.back();
-    } catch (error: any) {
-      Alert.alert('Submission Failed', error.message);
+    } catch {
+      showDanger('Could not upload your PDF. Check the file size and try again.');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Submit Document</Text>
-      
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Document Title"
-          placeholderTextColor="#777"
-          value={title}
-          onChangeText={setTitle}
-        />
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Description"
-          placeholderTextColor="#777"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={4}
-        />
+    <View style={[styles.root, { backgroundColor: colors.paper, paddingTop: insets.top + spacing.xs }]}>
+      <ScreenHeader eyebrow="Repository" title="Share a resource" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Field
+            label="Title"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="What is this paper or note about?"
+          />
+          <TextInput
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            placeholder="A short summary so classmates know what they are opening…"
+            placeholderTextColor={colors.fadedInk}
+            style={[
+              styles.bodyInput,
+              { color: colors.ink, backgroundColor: colors.paperCard, borderColor: colors.line },
+            ]}
+          />
 
-        <TouchableOpacity style={styles.fileButton} onPress={pickDocument}>
-          <Text style={styles.fileButtonText}>
-            {file ? file.name : 'Select PDF Document'}
-          </Text>
-        </TouchableOpacity>
+          <Text style={[styles.sectionLabel, { color: colors.fadedInk }]}>Subject</Text>
+          <View style={styles.chipWrap}>
+            {SUBJECTS.map((s) => (
+              <Pressable
+                key={s}
+                onPress={() => setSubject(s)}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: subject === s ? subjectColor(s) : colors.line,
+                    backgroundColor: subject === s ? `${subjectColor(s)}1A` : colors.paperCard,
+                  },
+                ]}
+              >
+                <Text style={[styles.chipText, { color: subject === s ? subjectColor(s) : colors.fadedInk }]}>
+                  {s}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Submit</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <Text style={[styles.sectionLabel, { color: colors.fadedInk }]}>Academic level</Text>
+          <View style={styles.chipWrap}>
+            {ACADEMIC_LEVELS.filter((l) => l.value !== 'ALL').map((l) => (
+              <Pressable
+                key={l.value}
+                onPress={() => setLevel(l.value)}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: level === l.value ? colors.teal : colors.line,
+                    backgroundColor: level === l.value ? `${colors.teal}1A` : colors.paperCard,
+                  },
+                ]}
+              >
+                <Text style={[styles.chipText, { color: level === l.value ? colors.teal : colors.fadedInk }]}>
+                  {l.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={[styles.sectionLabel, { color: colors.fadedInk }]}>PDF (max 25 MB)</Text>
+          <Pressable
+            onPress={pickPdf}
+            style={[
+              styles.dropZone,
+              { borderColor: colors.lineDark, backgroundColor: colors.paperCard },
+            ]}
+          >
+            {file ? (
+              <View style={styles.fileRow}>
+                <Ionicons name="document-text" size={22} color={colors.coral} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.fileName, { color: colors.ink }]} numberOfLines={1}>
+                    {file.name}
+                  </Text>
+                  {file.size != null ? (
+                    <Text style={[styles.fileSize, { color: colors.fadedInk }]}>
+                      {(file.size / (1024 * 1024)).toFixed(2)} MB
+                    </Text>
+                  ) : null}
+                </View>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => setFile(null)}
+                  accessibilityLabel="Remove file"
+                >
+                  <Ionicons name="close-circle" size={18} color={colors.fadedInk} />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.dropInner}>
+                <Ionicons name="cloud-upload-outline" size={26} color={colors.coral} />
+                <Text style={[styles.dropText, { color: colors.ink }]}>Choose a PDF</Text>
+                <Text style={[styles.dropHint, { color: colors.fadedInk }]}>
+                  Original manuscripts & open notes up to 25 MB
+                </Text>
+              </View>
+            )}
+          </Pressable>
+
+          <Button
+            title={busy ? 'Uploading…' : 'Upload to the repository'}
+            onPress={() => void submit()}
+            loading={busy}
+            disabled={!canSubmit}
+            style={styles.submit}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 32,
-  },
-  form: {
-    gap: 16,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    padding: 16,
-    color: '#fff',
-    fontSize: 16,
-  },
-  textArea: {
-    height: 120,
+  root: { flex: 1 },
+  scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  bodyInput: {
+    minHeight: 110,
+    borderWidth: 1.5,
+    borderRadius: radii.md,
+    borderTopRightRadius: 0,
+    padding: spacing.md,
+    fontFamily: 'GeneralSans_400',
+    fontSize: fontSize.body,
+    lineHeight: 23,
     textAlignVertical: 'top',
+    marginBottom: spacing.lg,
   },
-  fileButton: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#444',
+  sectionLabel: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  chip: {
+    borderWidth: 1.5,
+    borderRadius: radii.md,
+    borderTopRightRadius: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipText: {
+    fontFamily: 'GeneralSans_500',
+    fontSize: fontSize.caption,
+  },
+  dropZone: {
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 24,
-    alignItems: 'center',
+    borderRadius: radii.md,
+    borderTopRightRadius: 0,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  fileButtonText: {
-    color: '#aaa',
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  dropInner: { alignItems: 'center', gap: 4 },
+  dropText: { fontFamily: 'GeneralSans_600', fontSize: fontSize.small },
+  dropHint: { fontFamily: fonts.mono, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  fileName: { fontFamily: 'GeneralSans_600', fontSize: fontSize.small },
+  fileSize: { fontFamily: fonts.mono, fontSize: 10, marginTop: 1 },
+  submit: { marginTop: spacing.sm },
 });
