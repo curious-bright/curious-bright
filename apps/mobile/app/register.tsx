@@ -3,9 +3,11 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthShell } from '../src/components/auth/AuthShell';
+import { GoogleButton } from '../src/components/auth/GoogleButton';
 import { Button } from '../src/components/ui/Button';
 import { Field } from '../src/components/ui/Field';
 import { ApiError } from '../src/lib/api';
+import { isGoogleSignInEnabled } from '../src/lib/googleAuth';
 import { useAuth } from '../src/state/AuthContext';
 import { useTheme } from '../src/theme';
 
@@ -80,6 +82,8 @@ export default function RegisterScreen() {
       <Text style={[styles.sub, { color: colors.fadedInk }]}>
         Ask questions, share explanations and keep a public record of what you learn.
       </Text>
+
+      {isGoogleSignInEnabled() ? <GoogleButton label="Sign up with Google" /> : null}
 
       <Field
         label="Username"

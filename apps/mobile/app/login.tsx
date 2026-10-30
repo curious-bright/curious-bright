@@ -3,9 +3,11 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthShell } from '../src/components/auth/AuthShell';
+import { GoogleButton } from '../src/components/auth/GoogleButton';
 import { Button } from '../src/components/ui/Button';
 import { Field } from '../src/components/ui/Field';
 import { ApiError } from '../src/lib/api';
+import { isGoogleSignInEnabled } from '../src/lib/googleAuth';
 import { useAuth } from '../src/state/AuthContext';
 import { useTheme } from '../src/theme';
 
@@ -42,6 +44,8 @@ export default function LoginScreen() {
     <AuthShell>
       <Text style={[styles.heading, { color: colors.ink }]}>Welcome Back</Text>
       <Text style={[styles.sub, { color: colors.fadedInk }]}>Sign in to teach, learn and collaborate with the community.</Text>
+
+      {isGoogleSignInEnabled() ? <GoogleButton label="Continue with Google" /> : null}
 
       <Field
         label="Username or Email"
