@@ -23,6 +23,9 @@ Thumbs.db
 # Turbo
 .turbo/
 
+# Expo local state
+.expo/
+
 # Docker volumes
 pgdata/
 miniodata/
