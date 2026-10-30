@@ -12,3 +12,4 @@ channels-redis>=4.2
 uvicorn[standard]>=0.30
 daphne>=4.1
 requests>=2.31
+pywebpush>=2.0,<3.0

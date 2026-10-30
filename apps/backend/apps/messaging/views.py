@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.realtime.broadcast import publish
+from apps.push.services import push_to_user
 
 from .models import (
     Conversation,
@@ -137,6 +138,12 @@ class ConversationListCreateView(APIView):
                     "message.created",
                     MessageSerializer(message, context={"request": request}).data,
                 )
+                push_to_user(
+                    target,
+                    f"Message from @{request.user.username}",
+                    body,
+                    href=f"/messages/{conversation.pk}",
+                )
 
         return Response(
             _summary(conversation, request),
@@ -224,6 +231,12 @@ class ConversationMessageListView(APIView):
                 [f"messages.user.{other.pk}"],
                 "conversation.unread",
                 {"conversation_id": conversation.pk},
+            )
+            push_to_user(
+                other,
+                f"Message from @{request.user.username}",
+                serializer.validated_data["body"],
+                href=f"/messages/{conversation.pk}",
             )
         return Response(
             MessageSerializer(message, context={"request": request}).data,

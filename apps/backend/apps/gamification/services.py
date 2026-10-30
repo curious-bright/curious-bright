@@ -52,6 +52,14 @@ def award_badge(user, code, actor=None):
             verb=Notification.VERB.BADGE,
             text=f"You earned the {badge.name} badge!",
         )
+        from apps.push.services import push_to_user
+
+        push_to_user(
+            user,
+            "New badge earned",
+            f"You earned the {badge.name} badge!",
+            href="/notifications",
+        )
     return created
 
 

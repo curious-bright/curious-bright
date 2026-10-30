@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "apps.organizations",
     "apps.billing",
     "apps.messaging",
+    "apps.push",
 ]
 
 MIDDLEWARE = [
@@ -484,6 +485,16 @@ GOOGLE_CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = env(
     "GOOGLE_REDIRECT_URI", f"{APP_FRONTEND_URL.rstrip('/')}/auth/google/callback"
 )
+
+# Push notifications. Web Push uses VAPID keys (generate with
+# `npx web-push generate-vapid-keys`); native delivery goes through the Expo
+# push relay with an EAS access token. Leave everything blank to disable push
+# silently - delivery is always best-effort.
+VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", "")
+VAPID_CLAIMS_EMAIL = env("VAPID_CLAIMS_EMAIL", "mailto:notifications@curiousbright.com.ng")
+EXPO_PUSH_ACCESS_TOKEN = env("EXPO_PUSH_ACCESS_TOKEN", "")
+PUSH_ENABLED = bool(VAPID_PRIVATE_KEY or EXPO_PUSH_ACCESS_TOKEN)
 
 # Organization verification review notifications. The badge in the admin is
 # always live; this address is the extra email alert.

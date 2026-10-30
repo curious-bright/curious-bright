@@ -17,6 +17,7 @@ def notify(user, verb, actor=None, text="", post=None, comment=None):
     notification = Notification.objects.create(
         user=user, actor=actor, verb=verb, text=text, post=post, comment=comment
     )
+    from apps.push.services import push_to_user
     from apps.realtime.broadcast import publish
 
     from .serializers import NotificationSerializer
@@ -25,6 +26,12 @@ def notify(user, verb, actor=None, text="", post=None, comment=None):
         f"user.{user.pk}",
         "notification.created",
         NotificationSerializer(notification).data,
+    )
+    push_to_user(
+        user,
+        "New activity on Curious Bright",
+        text or (f"@{actor.username}" if actor is not None else ""),
+        href="/notifications",
     )
     return notification
 

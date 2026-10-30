@@ -65,6 +65,9 @@ Run `manage.py check` and `manage.py makemigrations --check --dry-run` before sh
 | `BILLING_PRO_USD` | no | `1200` | Legacy pro fallback in cents |
 | `SOFT_DELETE_UNDO_SECONDS` | no | `300` | Client undo/restore window |
 | `SOFT_DELETE_RETENTION_DAYS` | no | `30` | Purge horizon |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | web push | — | Web Push VAPID pair; generate with `npx web-push generate-vapid-keys`. Blank ⇒ web push disabled |
+| `VAPID_CLAIMS_EMAIL` | no | `mailto:notifications@curiousbright.com.ng` | `sub` claim in VAPID JWTs |
+| `EXPO_PUSH_ACCESS_TOKEN` | native push | — | EAS/Expo push access token (upload the FCM server key via `eas credentials`). Blank ⇒ Expo relay disabled |
 
 Fixed behaviour: JWT access 30 minutes / refresh 7 days with rotation and blacklisting; throttles `anon 200/min`, `user 600/min`, `auth 10/min`, plus scoped `verify_email 20/min`, `resend_code 6/min`, `change_email 6/min` and `password_reset 6/min`; page size 20.
 
@@ -216,6 +219,21 @@ Organization creation is restricted to `ORG_REGISTRATION_ALLOWED_ORIGINS` (and/o
 - `GET messages/blocks/` and `POST/DELETE messages/blocks/<username>/`
 
 Conversations are strictly one-to-one. Reads are participant-scoped and return 404 to outsiders; organization admins and moderators cannot read them. `Profile.message_privacy` controls new conversations (`anyone`, `follows`, `nobody`); existing conversations continue unless either user blocks the other. See [docs/messaging.md](../../docs/messaging.md).
+
+### Push notifications
+
+- `POST push/web-subscriptions/` — `{endpoint, p256dh, auth}` upsert (authenticated)
+- `DELETE push/web-subscriptions/` — `{endpoint}` removal
+- `POST push/expo-tokens/` — `{token, platform: ios|android}` upsert; `DELETE` with `{token}`
+- `GET push/vapid-public-key/` — public; `503 push_disabled` when VAPID is unset
+
+`apps/push` delivers best-effort: subscriptions are snapshotted in the request,
+delivery runs on capped daemon threads after `transaction.on_commit`, and every
+failure is logged only. Web Push (pywebpush + VAPID) prunes subscriptions on
+404/410; the Expo relay chunks ≤100 messages per request and deletes tokens
+returned as `DeviceNotRegistered`. Hooks: activity notifications, DM sends and
+badge awards. Set `VAPID_*` and `EXPO_PUSH_ACCESS_TOKEN` to enable either
+channel; both are silent no-ops when unset.
 
 ### Billing
 
