@@ -25,6 +25,9 @@ highlighter title reveals, subject accent colors — and caches everything with
 
    Without `.env`, dev builds fall back to the Expo host IP, then
    `http://10.0.2.2:8000` on Android emulators and `127.0.0.1` elsewhere.
+   Release/preview builds have no Metro host, so they default to
+   `https://api.curiousbright.com.ng` — set `EXPO_PUBLIC_API_URL` in the EAS
+   profile to target anything else.
 
    Google sign-in: set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and register
    `https://app.curiousbright.com.ng/auth/google/mobile` as an **authorized
@@ -89,6 +92,9 @@ highlighter title reveals, subject accent colors — and caches everything with
   dev-client rebuild after these native changes. For release builds, upload the
   FCM server key with `eas credentials`. Tapping a notification maps backend
   hrefs to routes (`/messages/<id>` → `/chat/<id>`, `/notifications` → `/inbox`).
+  Settings → **Send a test notification** exercises the whole chain without a
+  second account; it reports `no_device` if registration failed and
+  `push_disabled` if the server has no push credentials.
 - Signing out clears tokens and the entire persisted query cache.
 
 ## Update safety workflows

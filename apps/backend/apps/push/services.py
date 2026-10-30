@@ -152,9 +152,6 @@ def _deliver_expo(tokens, title, body, href):
             )
             response.raise_for_status()
             results = response.json().get("data", [])
-            for result in results:
-                if isinstance(result, dict) and result.get("status") == "error":
-                    logger.warning("push: expo ticket error: %s", result)
         except requests.HTTPError as exc:
             logger.error(
                 "push: expo relay rejected the batch: %s",
@@ -164,13 +161,12 @@ def _deliver_expo(tokens, title, body, href):
         except Exception:
             logger.exception("push: expo relay request failed")
             continue
-        dead = [
-            row["id"]
-            for row, result in zip(chunk, results)
-            if isinstance(result, dict)
-            and result.get("status") == "error"
-            and (result.get("details") or {}).get("error")
-            in ("DeviceNotRegistered", "InvalidSdkVersion")
-        ]
-        if dead:
-            ExpoPushToken.objects.filter(id__in=dead).delete()
+        for row, result in zip(chunk, results):
+            if not isinstance(result, dict) or result.get("status") != "error":
+                continue
+            logger.warning("push: expo ticket error: %s", result)
+            if (result.get("details") or {}).get("error") in (
+                "DeviceNotRegistered",
+                "InvalidSdkVersion",
+            ):
+                ExpoPushToken.objects.filter(id=row["id"]).delete()

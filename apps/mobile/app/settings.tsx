@@ -7,7 +7,8 @@ import { ScreenHeader } from '../src/components/layout/ScreenHeader';
 import { GridBackground } from '../src/components/ui/GridBackground';
 import { NotebookCard } from '../src/components/ui/NotebookCard';
 import { useAuth } from '../src/state/AuthContext';
-import { API_URL } from '../src/lib/api';
+import { API_URL, ApiError, apiFetchStrict } from '../src/lib/api';
+import { showDanger, showSuccess } from '../src/components/ui/Toast';
 import { fontSize, fonts, radii, spacing, useTheme, type ThemePreference } from '../src/theme';
 
 const PREFS: { value: ThemePreference; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -55,6 +56,8 @@ export default function SettingsScreen() {
   const { logout } = useAuth();
   const insets = useSafeAreaInsets();
   const [armedLogout, setArmedLogout] = useState(false);
+  const [pushTesting, setPushTesting] = useState(false);
+  const [pushHint, setPushHint] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -72,6 +75,23 @@ export default function SettingsScreen() {
   };
 
   const lineColor = colors.line;
+
+  const sendTestPush = async () => {
+    if (pushTesting) return;
+    setPushTesting(true);
+    try {
+      await apiFetchStrict('/push/test/', { method: 'POST', body: JSON.stringify({}) });
+      setPushHint(null);
+      showSuccess('Test push queued — check the notification shade.');
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : 'Could not reach the server.';
+      setPushHint(message);
+      showDanger(message);
+    } finally {
+      setPushTesting(false);
+    }
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
@@ -125,6 +145,18 @@ export default function SettingsScreen() {
               onPress={() => router.push('/change-password')}
             />
           </View>
+        </NotebookCard>
+
+        <Text style={[styles.sectionLabel, { color: colors.fadedInk }]}>Notifications</Text>
+        <NotebookCard style={styles.card} padded={false}>
+          <Row
+            icon={pushTesting ? 'hourglass-outline' : 'notifications-outline'}
+            label={pushTesting ? 'Sending test…' : 'Send a test notification'}
+            hint={pushHint ?? 'Checks that this device is reachable while the app is closed'}
+            color={colors.ink}
+            faded={colors.fadedInk}
+            onPress={() => void sendTestPush()}
+          />
         </NotebookCard>
 
         <Text style={[styles.sectionLabel, { color: colors.fadedInk }]}>The fine print</Text>

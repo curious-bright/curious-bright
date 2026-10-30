@@ -236,6 +236,30 @@ class PushAPIEndpointTests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["code"], "push_disabled")
 
+    def test_push_test_needs_a_registered_device(self):
+        with patch("apps.push.services.push_to_user") as push:
+            response = self.client.post("/api/push/test/", {}, format="json")
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["code"], "no_device")
+        push.assert_not_called()
+
+    def test_push_test_queues_to_the_caller(self):
+        ExpoPushToken.objects.create(user=self.alice, token="Expoabc", platform="android")
+        with patch("apps.push.services.push_to_user") as push:
+            response = self.client.post("/api/push/test/", {}, format="json")
+        self.assertEqual(response.status_code, 202, response.content)
+        push.assert_called_once()
+        self.assertEqual(push.call_args.args[0], self.alice)
+
+    def test_push_test_disabled_on_server(self):
+        ExpoPushToken.objects.create(user=self.alice, token="Expoabc", platform="android")
+        with override_settings(PUSH_ENABLED=False), patch(
+            "apps.push.services.push_to_user"
+        ) as push:
+            response = self.client.post("/api/push/test/", {}, format="json")
+        self.assertEqual(response.status_code, 503)
+        push.assert_not_called()
+
 
 @override_settings(**PUSH_SETTINGS)
 class PushHookTests(TestCase):

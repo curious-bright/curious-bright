@@ -226,6 +226,8 @@ Conversations are strictly one-to-one. Reads are participant-scoped and return 4
 - `DELETE push/web-subscriptions/` — `{endpoint}` removal
 - `POST push/expo-tokens/` — `{token, platform: ios|android}` upsert; `DELETE` with `{token}`
 - `GET push/vapid-public-key/` — public; `503 push_disabled` when VAPID is unset
+- `POST push/test/` — one notification to every device of the caller; `409 no_device`
+  when the account has registered none, `503 push_disabled` when unconfigured
 
 `apps/push` delivers best-effort: subscriptions are snapshotted in the request,
 delivery runs on capped daemon threads after `transaction.on_commit`, and every
@@ -309,7 +311,7 @@ Current suite: **200 tests**. It covers the error contract, visibility, PII-safe
 - For multi-worker realtime, link Redis and set `REDIS_URL`.
 - For video, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
 - For billing, set `PAYSTACK_SECRET_KEY`; point the Paystack webhook at `https://<api-host>/api/billing/webhook/paystack/` and the return URL at `https://org.curiousbright.com.ng/billing/verify`.
-- For web push, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate with `npx web-push generate-vapid-keys`; keep the private half out of chat/logs). For native (Expo/FCM) push, set `EXPO_PUSH_ACCESS_TOKEN`. All are optional — push stays silently disabled without them.
+- For web push, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate with `npx web-push generate-vapid-keys`; keep the private half out of chat/logs). For native (Expo/FCM) push, set `EXPO_PUSH_ACCESS_TOKEN`. All are optional — push stays silently disabled without them. Confirm the live setup from a device with Settings → Send a test notification (`POST /api/push/test/`).
 - Media is served from the container filesystem (even with debug off). Attach a persistent volume at `apps/backend/media` or switch to object storage.
 - Verification documents use a separate private storage root (`PRIVATE_MEDIA_ROOT`). Attach a second persistent private volume; never expose it through the public media proxy/CDN.
 - Set `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS` explicitly in production.

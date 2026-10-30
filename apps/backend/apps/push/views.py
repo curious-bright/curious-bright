@@ -68,3 +68,41 @@ class VapidPublicKeyView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response({"key": key})
+
+
+class PushTestView(APIView):
+    """Delivers one notification to the caller's own devices.
+
+    Lets the app verify the whole chain — token registration, relay
+    credentials, FCM, the device channel — without needing a second account to
+    trigger a real event.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .services import push_to_user
+
+        if not settings.PUSH_ENABLED:
+            return Response(
+                {"code": "push_disabled", "message": "Push is not configured on the server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        registered = ExpoPushToken.objects.filter(user=request.user).exists() or (
+            WebPushSubscription.objects.filter(user=request.user).exists()
+        )
+        if not registered:
+            return Response(
+                {
+                    "code": "no_device",
+                    "message": "This account has no device registered for push yet.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        push_to_user(
+            request.user,
+            "Curious Bright",
+            "Push delivery works on this device.",
+            href="/notifications",
+        )
+        return Response({"status": "queued"}, status=status.HTTP_202_ACCEPTED)

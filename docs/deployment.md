@@ -212,7 +212,27 @@ PRIVATE_MEDIA_ROOT=/data/private_media
 - If moving to object storage, keep the private bucket and signed/streamed
   access. Do not rewrite the URL to a public object URL.
 
-### 2.7 Start and check
+### 2.7 Push notifications
+
+```dotenv
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CLAIMS_EMAIL=mailto:notifications@curiousbright.com.ng
+EXPO_PUSH_ACCESS_TOKEN=
+```
+
+- Web Push (the installed PWA) needs the VAPID pair — generate with
+  `npx web-push generate-vapid-keys` and treat the private half like a
+  password: environment only, never a commit, chat log or ticket.
+- Native Android/iOS push needs `EXPO_PUSH_ACCESS_TOKEN` from the EAS project,
+  plus the FCM server key uploaded to that project (`eas credentials`).
+- Each half can stay blank: delivery is skipped with a log line instead of
+  failing the request that triggered it.
+- Verify the whole chain from a device: Settings → Send a test notification
+  (`POST /api/push/test/`). `no_device` means the app never registered a
+  token; `push_disabled` means the server has no credentials.
+
+### 2.8 Start and check
 
 The Docker entrypoint runs migrations, optional admin bootstrap,
 `collectstatic`, then uvicorn/ASGI. Before or after deploy:
