@@ -27,10 +27,8 @@ highlighter title reveals, subject accent colors — and caches everything with
    `http://10.0.2.2:8000` on Android emulators and `127.0.0.1` elsewhere.
 
    Google sign-in: set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and register
-   `https://app.curiousbright.com.ng/auth/google/mobile` as an **authorized
-   redirect URI** on that OAuth client (Google only accepts https URIs; the
-   web app relays the code back to the app via `curiousbright://auth/google`).
-   The button hides itself while the env var is empty.
+   `curiousbright://auth/google` as an **authorized redirect URI** on that
+   OAuth client. The button hides itself while the env var is empty.
 
 3. **Install & build** — Reanimated 4 worklets require a **dev client** (not Expo Go):
 
@@ -77,10 +75,8 @@ highlighter title reveals, subject accent colors — and caches everything with
   get `usesCleartextTraffic` via `plugins/withAndroidCleartext.js` (set the API
   URL to HTTPS for production instead when possible).
 - Google sign-in uses authorization-code + PKCE (`src/lib/googleAuth.ts`,
-  expo-auth-session `AuthRequest`); the browser lands on the web app's
-  `/auth/google/mobile` relay (Google only accepts https redirect URIs), which
-  reopens the app at `curiousbright://auth/google`, and `POST /api/auth/google/`
-  exchanges the code.
+  expo-auth-session `AuthRequest`); the code is exchanged by
+  `POST /api/auth/google/` on the backend.
 - Push notifications (`src/lib/nativePush.ts`): on sign-in the app requests
   notification permission and registers the Expo push token via
   `POST /api/push/expo-tokens/`; sign-out deletes it. Android FCM is wired

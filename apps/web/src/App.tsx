@@ -53,7 +53,6 @@ import { CuriousLoading } from './components/CuriousStates';
 // Heavy tools (video/LiveKit and the PDF reader) load only when opened.
 const Room = lazy(() => import('./pages/Room'));
 const Read = lazy(() => import('./pages/Read'));
-const GoogleMobileRelay = lazy(() => import('./pages/GoogleMobileRelay'));
 
 function MobileHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { user, isAuthenticated } = useAuth();
@@ -158,7 +157,6 @@ function AppShell() {
                       <Route path="/forgot-password" element={<ForgotPassword />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/auth/google/callback" element={<GoogleCallback />} />
-                      <Route path="/auth/google/mobile" element={<GoogleMobileRelay />} />
                       <Route path="/feed" element={<Feed />} />
                       <Route path="/post/:id" element={<PostDetail />} />
                       <Route path="/profile/:username" element={<Profile />} />
