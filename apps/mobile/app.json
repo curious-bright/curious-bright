@@ -4,9 +4,7 @@
     "slug": "curiousbright",
     "scheme": "curiousbright",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/8c557c1f-10b6-4b2e-bb01-202136089381",
       "fallbackToCacheTimeout": 0
