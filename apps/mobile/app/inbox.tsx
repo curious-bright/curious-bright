@@ -68,7 +68,7 @@ export default function InboxScreen() {
   };
 
   const renderItem = ({ item, index }: { item: NotificationItem; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 6) * 40)}>
+    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 6) * 40)} style={styles.cell}>
       <Pressable
         onPress={() => open(item)}
         style={[
@@ -123,13 +123,14 @@ export default function InboxScreen() {
 
       {isLoading ? (
         <CuriousLoading message="Checking your margin notes…" />
-      ) : isError ? (
+      ) : isError && items.length === 0 ? (
         <CuriousError onRetry={() => refetch()} />
       ) : (
         <FlashList
           data={items}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          keyExtractor={(item) => String(item.id)}
+          ListFooterComponent={<View style={styles.listEnd} />}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -164,11 +165,11 @@ const styles = StyleSheet.create({
     fontFamily: 'GeneralSans_600',
     fontSize: fontSize.caption,
   },
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 100,
-    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
+  listEnd: { height: 40 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

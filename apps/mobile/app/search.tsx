@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../src/components/ui/Avatar';
-import { CuriousEmpty, CuriousError } from '../src/components/ui/CuriousStates';
+import { CuriousEmpty, CuriousError, CuriousLoading } from '../src/components/ui/CuriousStates';
 import { GridBackground } from '../src/components/ui/GridBackground';
 import { NotebookCard } from '../src/components/ui/NotebookCard';
 import { PostCard } from '../src/components/feed/PostCard';
@@ -14,7 +14,7 @@ import { useAuth } from '../src/state/AuthContext';
 import { fetchSearch, q } from '../src/lib/queries';
 import { subjectColor } from '../src/lib/subjects';
 import { fontSize, fonts, radii, spacing, useTheme } from '../src/theme';
-import type { FeedPost, ProfileSummary } from '../src/lib/types';
+import type { FeedPost, SearchUser } from '../src/lib/types';
 
 const RECENTS_KEY = 'cb.sear…ents';
 const RECENTS_MAX = 8;
@@ -40,7 +40,7 @@ export default function SearchScreen() {
   }, []);
 
   const enabled = debounced.length >= 2;
-  const { data, isError, refetch, isFetching } = useQuery({
+  const { data, isError, refetch, isFetching, isPending } = useQuery({
     queryKey: q.search(debounced),
     queryFn: () => fetchSearch(debounced),
     enabled,
@@ -56,7 +56,7 @@ export default function SearchScreen() {
     });
   };
 
-  const users: ProfileSummary[] = data?.users ?? [];
+  const users: SearchUser[] = data?.users ?? [];
   const posts: FeedPost[] = data?.posts ?? [];
   const hasResults = users.length > 0 || posts.length > 0;
 
@@ -149,6 +149,8 @@ export default function SearchScreen() {
           )
         ) : isError ? (
           <CuriousError onRetry={() => refetch()} />
+        ) : enabled && isPending ? (
+          <CuriousLoading message="Searching the notebook…" />
         ) : !isFetching && !hasResults ? (
           <CuriousEmpty
             title={`Nothing filed under “${debounced}”`}
@@ -166,7 +168,7 @@ export default function SearchScreen() {
                       style={styles.personRow}
                       android_ripple={null}
                     >
-                      <Avatar username={p.username} uri={p.avatar_url || p.avatar} size={40} />
+                      <Avatar username={p.username} uri={p.avatar_url} size={40} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.personName, { color: colors.ink }]} numberOfLines={1}>
                           @{p.username}

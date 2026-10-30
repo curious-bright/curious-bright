@@ -126,10 +126,10 @@ export function ProfileView({ username }: { username: string }) {
     });
   };
 
-  if (profileQuery.isLoading) {
+  if (profileQuery.isPending) {
     return <CuriousLoading message="Opening their page…" />;
   }
-  if (profileQuery.isError || !profile) {
+  if (!profile) {
     return <CuriousError onRetry={() => profileQuery.refetch()} />;
   }
 
@@ -145,7 +145,10 @@ export function ProfileView({ username }: { username: string }) {
   };
 
   const renderItem = ({ item, index }: { item: FeedPost; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 6) * 40)}>
+    <Animated.View
+      entering={FadeInDown.duration(280).delay(Math.min(index, 6) * 40)}
+      style={styles.cell}
+    >
       <PostCard
         post={item}
         me={user ? { username: user.username, can_moderate: user.can_moderate } : null}
@@ -164,7 +167,7 @@ export function ProfileView({ username }: { username: string }) {
       getItemType={(item) => item.kind}
       key={username}
       renderItem={renderItem}
-      contentContainerStyle={styles.list}
+      keyExtractor={(item) => String(item.id)}
       onEndReached={() => {
         if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage) postsQuery.fetchNextPage();
       }}
@@ -335,6 +338,7 @@ export function ProfileView({ username }: { username: string }) {
           />
         ) : null
       }
+      ListFooterComponent={<View style={styles.listEnd} />}
       refreshing={postsQuery.isRefetching && !postsQuery.isFetchingNextPage}
       onRefresh={() => postsQuery.refetch()}
     />
@@ -361,12 +365,13 @@ async function imageBytes(uri: string): Promise<number | null> {
 }
 
 const styles = StyleSheet.create({
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-    gap: spacing.md,
+    marginBottom: spacing.md,
   },
+  listEnd: { height: 110 },
   header: {
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
     gap: spacing.md,

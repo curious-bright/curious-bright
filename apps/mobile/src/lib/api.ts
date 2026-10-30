@@ -11,12 +11,18 @@ import { showDanger } from '../components/ui/Toast';
 const ACCESS_KEY = 'cb_access';
 const REFRESH_KEY = 'cb_refresh';
 
+// Standalone (preview/production) builds have no Metro host to infer a dev
+// server from, so they must default to the deployed API.
+const PRODUCTION_API_URL = 'https://api.curiousbright.com.ng';
+
 function resolveApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   // Expo dev server host (exp://192.168.x.x:8081) also hosts the API in dev.
+  // An Android emulator reaches the host machine as 10.0.2.2 through this path.
   const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
   const host = hostUri?.split(':')[0];
   if (host && host !== 'localhost' && host !== '127.0.0.1') return `http://${host}:8000`;
+  if (!__DEV__) return PRODUCTION_API_URL;
   if (Platform.OS === 'android') return 'http://10.0.2.2:8000';
   return 'http://127.0.0.1:8000';
 }

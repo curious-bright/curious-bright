@@ -108,7 +108,7 @@ function NewChatSheet({ visible, onClose }: { visible: boolean; onClose: () => v
                 }}
                 style={[styles.sheetRow, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
               >
-                <Avatar username={u.username} uri={u.avatar_url || u.avatar} size={36} />
+                <Avatar username={u.username} uri={u.avatar_url} size={36} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[styles.sheetName, { color: colors.ink }]}>@{u.username}</Text>
                   {u.subject_expertise ? (
@@ -144,7 +144,7 @@ export default function ChatScreen() {
   } = useQuery({ queryKey: q.conversations, queryFn: fetchConversations });
 
   const renderItem = ({ item, index }: { item: ConversationSummary; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 8) * 35)}>
+    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 8) * 35)} style={styles.cell}>
       <Pressable
         onPress={() => router.push(`/chat/${item.id}`)}
         style={[styles.row, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
@@ -185,33 +185,25 @@ export default function ChatScreen() {
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <HighlighterText>Messages</HighlighterText>
-            <View style={styles.headerActions}>
-              <NotificationBell />
-              <Pressable
-                hitSlop={8}
-                onPress={() => setSheetOpen(true)}
-                style={[styles.iconBtn, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
-                accessibilityLabel="New conversation"
-              >
-                <Ionicons name="square-outline" size={17} color={colors.ink} />
-                <Ionicons name="pencil" size={11} color={colors.coral} style={styles.composeGlyph} />
-              </Pressable>
-            </View>
+            <NotificationBell />
           </View>
           <Text style={[styles.subtitle, { color: colors.fadedInk }]}>
             Private threads. Only the two of you can read them.
           </Text>
         </View>
 
-        {isLoading && conversations.length === 0 ? (
-          <CuriousLoading message="Opening your conversations…" />
-        ) : isError ? (
-          <CuriousError onRetry={() => refetch()} />
+        {conversations.length === 0 && (isLoading || isError) ? (
+          isError ? (
+            <CuriousError onRetry={() => refetch()} />
+          ) : (
+            <CuriousLoading message="Opening your conversations…" />
+          )
         ) : (
           <FlashList
             data={conversations}
             renderItem={renderItem}
-            contentContainerStyle={styles.list}
+            keyExtractor={(item) => String(item.id)}
+            ListFooterComponent={<View style={styles.listEnd} />}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
@@ -223,13 +215,25 @@ export default function ChatScreen() {
             ListEmptyComponent={
               <CuriousEmpty
                 title="No conversations yet"
-                description="Start one from a member's profile or with the button above."
+                description="Start one from a member's profile or with the compose button."
                 flourishText="Private"
               />
             }
           />
         )}
       </ScreenEnter>
+
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          setSheetOpen(true);
+        }}
+        style={[styles.fab, { backgroundColor: colors.coral }]}
+        accessibilityLabel="New conversation"
+      >
+        <Ionicons name="pencil" size={20} color="#FFF" />
+        <View style={styles.fabEar} />
+      </Pressable>
 
       <NewChatSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
     </View>
@@ -249,33 +253,41 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 4,
+  fab: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: 88,
+    width: 52,
+    height: 52,
+    borderRadius: radii.lg,
     borderTopRightRadius: 0,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  composeGlyph: {
+  fabEar: {
     position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
   subtitle: {
     fontFamily: fonts.body,
     fontSize: fontSize.small,
     marginBottom: spacing.sm,
   },
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 100,
-    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
+  listEnd: { height: 140 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

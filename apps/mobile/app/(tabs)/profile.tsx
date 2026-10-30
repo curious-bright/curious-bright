@@ -17,7 +17,7 @@ export default function ProfileTab() {
   return (
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <GridBackground />
-      <View style={{ paddingTop: insets.top + spacing.xs }}>
+      <View style={[styles.body, { paddingTop: insets.top + spacing.xs }]}>
         <ScreenEnter>
           <ProfileView username={user.username} />
         </ScreenEnter>
@@ -28,4 +28,5 @@ export default function ProfileTab() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  body: { flex: 1 },
 });

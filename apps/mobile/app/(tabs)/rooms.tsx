@@ -139,7 +139,7 @@ export default function RoomsScreen() {
   }, [allRooms, filter]);
 
   const renderRoom = ({ item, index }: { item: RoomInfo; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 8) * 35)}>
+    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index, 8) * 35)} style={styles.cell}>
       <Pressable
         onPress={() => router.push(`/room/${item.id}`)}
         style={[styles.card, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
@@ -216,15 +216,15 @@ export default function RoomsScreen() {
           />
         </View>
 
-        {rooms.isLoading ? (
+        {rooms.isPending && allRooms.length === 0 ? (
           <CuriousLoading message="Opening the room directory…" />
-        ) : rooms.isError ? (
+        ) : rooms.isError && allRooms.length === 0 ? (
           <CuriousError onRetry={() => rooms.refetch()} />
         ) : (
           <FlashList
             data={visibleRooms}
             renderItem={renderRoom}
-            contentContainerStyle={styles.list}
+            keyExtractor={(item) => String(item.id)}
             refreshControl={
               <RefreshControl
                 refreshing={rooms.isRefetching}
@@ -238,7 +238,12 @@ export default function RoomsScreen() {
             }}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
-              rooms.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.coral} /> : null
+              <View>
+                {rooms.isFetchingNextPage ? (
+                  <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.coral} />
+                ) : null}
+                <View style={styles.listEnd} />
+              </View>
             }
             ListEmptyComponent={
               allRooms.length === 0 ? (
@@ -305,11 +310,11 @@ const styles = StyleSheet.create({
   },
   filterInput: { marginBottom: spacing.sm },
   inputMultiline: { minHeight: 72, textAlignVertical: 'top' },
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-    gap: spacing.md,
+    marginBottom: spacing.md,
   },
+  listEnd: { height: 140 },
   card: {
     borderWidth: 1.5,
     borderRadius: radii.md,

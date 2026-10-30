@@ -44,6 +44,15 @@ export interface ProfileSummary {
   created_at: string;
 }
 
+export interface SearchUser {
+  id: number;
+  username: string;
+  headline: string;
+  avatar_url: string;
+  bio: string;
+  subject_expertise: string;
+}
+
 export interface Me {
   id: number;
   username: string;

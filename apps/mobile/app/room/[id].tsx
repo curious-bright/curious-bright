@@ -22,7 +22,7 @@ import { Button } from '../../src/components/ui/Button';
 import { CuriousError, CuriousLoading } from '../../src/components/ui/CuriousStates';
 import { GridBackground } from '../../src/components/ui/GridBackground';
 import { useStartConversation } from '../../src/hooks/useChat';
-import { apiFetch, apiFetchStrict, apiVoid } from '../../src/lib/api';
+import { apiFetch, apiFetchStrict, apiVoid, resultsOf, type Paginated } from '../../src/lib/api';
 import { useRealtime } from '../../src/lib/realtime';
 import { fetchRoom, fetchRoomMembers, fetchRoomMessages, q } from '../../src/lib/queries';
 import { fontSize, fonts, radii, spacing, useTheme } from '../../src/theme';
@@ -106,15 +106,12 @@ export default function RoomScreen() {
   );
 
   const pollNew = useCallback(async () => {
-    if (lastIdRef.current > 0) {
-      const incoming = await apiFetch<RoomMessage[]>(
-        `/rooms/${roomId}/messages/?after=${lastIdRef.current}`,
-      );
-      if (Array.isArray(incoming)) appendMessages(incoming);
-    } else {
-      const incoming = await apiFetch<RoomMessage[]>(`/rooms/${roomId}/messages/`);
-      if (Array.isArray(incoming)) appendMessages(incoming);
-    }
+    const suffix = lastIdRef.current > 0 ? `?after=${lastIdRef.current}` : '';
+    const incoming = await apiFetch<RoomMessage[] | Paginated<RoomMessage>>(
+      `/rooms/${roomId}/messages/${suffix}`,
+    );
+    const fresh = resultsOf(incoming);
+    if (fresh.length) appendMessages(fresh);
   }, [roomId, appendMessages]);
 
   const { connected, send } = useRealtime(
@@ -231,7 +228,7 @@ export default function RoomScreen() {
     );
   }
 
-  if (roomQuery.isLoading || messagesQuery.isLoading) {
+  if (roomQuery.isPending) {
     return (
       <View style={[styles.root, { backgroundColor: colors.paper }]}>
         <ScreenHeader eyebrow="Room" title={room?.name ?? 'Study room'} />
@@ -293,7 +290,7 @@ export default function RoomScreen() {
     const prev = index > 0 ? messages[index - 1] : null;
     const showDay = !prev || dayKey(prev.created_at) !== dayKey(item.created_at);
     return (
-      <View>
+      <View style={styles.cell}>
         {showDay ? (
           <Text style={[styles.daySeparator, { color: colors.fadedInk }]}>{dayLabel(item.created_at)}</Text>
         ) : null}
@@ -400,7 +397,7 @@ export default function RoomScreen() {
         <FlashList
           data={messages}
           renderItem={renderRow}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={(item) => String(item.id)}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
           ListEmptyComponent={
             <Text style={[styles.emptyNote, { color: colors.fadedInk }]}>
@@ -525,7 +522,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
-  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.xs },
+  cell: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   row: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },

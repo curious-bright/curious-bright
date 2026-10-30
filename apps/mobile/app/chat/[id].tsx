@@ -20,7 +20,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { ScreenHeader } from '../../src/components/layout/ScreenHeader';
 import { Avatar } from '../../src/components/ui/Avatar';
 import { Button } from '../../src/components/ui/Button';
-import { CuriousLoading } from '../../src/components/ui/CuriousStates';
+import { CuriousError, CuriousLoading } from '../../src/components/ui/CuriousStates';
 import { showSuccess } from '../../src/components/ui/Toast';
 import { useMarkConversationRead } from '../../src/hooks/useChat';
 import { apiFetchStrict, apiVoid } from '../../src/lib/api';
@@ -95,7 +95,12 @@ export default function ConversationThreadScreen() {
   });
   const cached = conversations.find((c) => c.id === convId) ?? null;
 
-  const { data: fetchedSummary } = useQuery({
+  const {
+    data: fetchedSummary,
+    isPending: summaryPending,
+    isError: summaryError,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: q.conversation(convId),
     queryFn: () => fetchConversation(convId),
     enabled: valid && !cached,
@@ -270,11 +275,32 @@ export default function ConversationThreadScreen() {
     }
   };
 
-  if (!valid || messagesLoading || !summary) {
+  if (!valid) {
     return (
       <View style={[styles.root, { backgroundColor: colors.paper }]}>
         <ScreenHeader eyebrow="Private" title="Thread" />
-        <CuriousLoading message="Loading messages…" />
+        <CuriousError title="Bad thread link" message="This conversation address is not valid." />
+      </View>
+    );
+  }
+
+  if (!summary || !summary.other_user) {
+    if (summaryPending || messagesLoading) {
+      return (
+        <View style={[styles.root, { backgroundColor: colors.paper }]}>
+          <ScreenHeader eyebrow="Private" title="Thread" />
+          <CuriousLoading message="Loading messages…" />
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.root, { backgroundColor: colors.paper }]}>
+        <ScreenHeader eyebrow="Private" title="Thread" />
+        <CuriousError
+          title="Conversation unavailable"
+          message="This thread was deleted, or it belongs to an account you can no longer message."
+          onRetry={() => refetchSummary()}
+        />
       </View>
     );
   }
@@ -287,7 +313,7 @@ export default function ConversationThreadScreen() {
     const prev = index > 0 ? messages[index - 1] : null;
     const showDay = !prev || dayKey(prev.created_at) !== dayKey(item.created_at);
     return (
-      <View>
+      <View style={styles.cell}>
         {showDay ? (
           <Text style={[styles.daySeparator, { color: colors.fadedInk }]}>{dayLabel(item.created_at)}</Text>
         ) : null}
@@ -397,7 +423,7 @@ export default function ConversationThreadScreen() {
         <FlashList
           data={messages}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={(item) => String(item.id)}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
           ListHeaderComponent={
             hasMore ? (
@@ -554,7 +580,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.xs },
+  cell: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   row: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
@@ -584,6 +610,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderTopRightRadius: 0,
     alignSelf: 'center',
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,

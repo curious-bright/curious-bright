@@ -16,7 +16,7 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <GridBackground />
-      <View style={{ paddingTop: insets.top + spacing.xs }}>
+      <View style={[styles.body, { paddingTop: insets.top + spacing.xs }]}>
         <ScreenHeader eyebrow="Member page" title={`@${username}`} />
         <ProfileView username={username} />
       </View>
@@ -26,4 +26,5 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  body: { flex: 1, paddingTop: spacing.xs },
 });

@@ -14,6 +14,7 @@ import type {
   RoomInfo,
   RoomMember,
   RoomMessage,
+  SearchUser,
 } from './types';
 
 export const q = {
@@ -130,7 +131,7 @@ export const fetchConsent = () => apiFetchStrict<ConsentState>('/auth/consent/')
 export interface SearchResults {
   posts: FeedPost[];
   rooms: { id: number; name: string; topic?: string }[];
-  users: ProfileSummary[];
+  users: SearchUser[];
 }
 
 export async function fetchSearch(term: string): Promise<SearchResults> {

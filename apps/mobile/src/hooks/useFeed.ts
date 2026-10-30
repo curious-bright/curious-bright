@@ -76,6 +76,7 @@ export function useFeed(tab: 'discover' | 'following') {
     isFetchingNextPage: query.isFetchingNextPage,
     isError: query.isError,
     isLoading: query.isLoading,
+    isPending: query.isPending,
     error: query.error,
   };
 }

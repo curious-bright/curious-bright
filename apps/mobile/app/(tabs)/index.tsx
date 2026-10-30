@@ -29,7 +29,7 @@ export default function FeedScreen() {
   const flag = useFlagPost();
 
   const renderItem = ({ item, index }: { item: FeedPost; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(320).delay(Math.min(index, 6) * 45)}>
+    <Animated.View entering={FadeInDown.duration(320).delay(Math.min(index, 6) * 45)} style={styles.cell}>
       <PostCard
         post={item}
         me={user ? { username: user.username, can_moderate: user.can_moderate } : null}
@@ -93,16 +93,16 @@ export default function FeedScreen() {
           </View>
         </View>
 
-        {feed.isLoading && !feed.posts.length ? (
+        {feed.isPending && !feed.posts.length ? (
           <CuriousLoading message="Unrolling the community notebook…" />
-        ) : feed.isError ? (
+        ) : feed.isError && !feed.posts.length ? (
           <CuriousError onRetry={() => feed.refetch()} />
         ) : (
           <FlashList
             data={feed.posts}
             key={tab}
             renderItem={renderItem}
-            contentContainerStyle={styles.list}
+            keyExtractor={(item) => String(item.id)}
             getItemType={(item) => item.kind}
             refreshControl={
               <RefreshControl
@@ -136,9 +136,12 @@ export default function FeedScreen() {
               )
             }
             ListFooterComponent={
-              feed.isFetchingNextPage ? (
-                <ActivityIndicator style={styles.footerSpinner} color={colors.coral} />
-              ) : null
+              <View>
+                {feed.isFetchingNextPage ? (
+                  <ActivityIndicator style={styles.footerSpinner} color={colors.coral} />
+                ) : null}
+                <View style={styles.listEnd} />
+              </View>
             }
           />
         )}
@@ -199,11 +202,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-    gap: spacing.md,
+    marginBottom: spacing.md,
   },
+  listEnd: { height: 140 },
   footerSpinner: {
     marginVertical: spacing.lg,
   },

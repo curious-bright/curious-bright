@@ -29,6 +29,14 @@ if (Notifications) {
   });
 }
 
+function devLog(message: string): void {
+  if (__DEV__) console.log(`[push] ${message}`);
+}
+
+function devWarn(message: string): void {
+  if (__DEV__) console.warn(`[push] ${message}`);
+}
+
 // Backend hrefs -> mobile routes.
 const HREF_ROUTES: Record<string, string> = {
   '/notifications': '/inbox',
@@ -42,16 +50,30 @@ function hrefToRoute(href: string | undefined): string | null {
 }
 
 let responseListenerAttached = false;
+let handledResponseId: string | null = null;
+
+function openResponse(
+  response: import('expo-notifications').NotificationResponse,
+  onOpen: (route: string) => void,
+): void {
+  const id = `${response.notification.request.identifier}:${response.notification.date}`;
+  if (handledResponseId === id) return;
+  handledResponseId = id;
+  const route = hrefToRoute(response.notification.request.content.data?.href as string | undefined);
+  if (route) onOpen(route);
+}
 
 export function attachNotificationResponseListener(onOpen: (route: string) => void): void {
   if (!Notifications || responseListenerAttached) return;
   responseListenerAttached = true;
-  Notifications.addNotificationResponseReceivedListener((response) => {
-    const route = hrefToRoute(
-      response.notification.request.content.data?.href as string | undefined
-    );
-    if (route) onOpen(route);
-  });
+  Notifications.addNotificationResponseReceivedListener((response) => openResponse(response, onOpen));
+  // A tap that cold-started the app fires no listener — the response is only
+  // readable from the launch snapshot.
+  void Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      if (response) openResponse(response, onOpen);
+    })
+    .catch(() => {});
 }
 
 export function isPushCapable(): boolean {
@@ -73,7 +95,11 @@ async function ensureAndroidChannel(): Promise<void> {
  * backend. Returns true when the token was stored.
  */
 export async function registerForPushNotifications(): Promise<boolean> {
-  if (!Notifications || !Device.isDevice) return false;
+  if (!Notifications) return false;
+  if (!Device.isDevice) {
+    devWarn('skipped: not a physical device (Expo Go / simulator)');
+    return false;
+  }
 
   await ensureAndroidChannel();
 
@@ -82,16 +108,27 @@ export async function registerForPushNotifications(): Promise<boolean> {
   if (status !== 'granted') {
     status = (await Notifications.requestPermissionsAsync()).status;
   }
-  if (status !== 'granted') return false;
+  if (status !== 'granted') {
+    devWarn('skipped: notification permission denied');
+    return false;
+  }
 
   try {
     const token = (await Notifications.getExpoPushTokenAsync()).data;
-    if (!token) return false;
-    return apiVoid('/push/expo-tokens/', {
+    if (!token) {
+      devWarn('skipped: empty Expo push token');
+      return false;
+    }
+    const stored = await apiVoid('/push/expo-tokens/', {
       method: 'POST',
       body: JSON.stringify({ token, platform: Platform.OS }),
     });
-  } catch {
+    devLog(`registered push token ${token.slice(0, 18)}… -> ${stored ? 'ok' : 'backend rejected'}`);
+    return stored;
+  } catch (err) {
+    // Usually FCM unavailable: wrong/outdated google-services.json, no Play
+    // services, or the build is not linked to this Expo project.
+    devWarn(`token request failed: ${(err as Error)?.message ?? err}`);
     return false;
   }
 }

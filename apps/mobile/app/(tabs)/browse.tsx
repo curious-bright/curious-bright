@@ -66,7 +66,7 @@ export default function BrowseScreen() {
   const onSearchSubmit = () => setDebounced(searchTerm.trim());
 
   const renderItem = ({ item, index }: { item: FeedPost; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(300).delay(Math.min(index, 6) * 40)}>
+    <Animated.View entering={FadeInDown.duration(300).delay(Math.min(index, 6) * 40)} style={styles.cell}>
       <PostCard
         post={item}
         me={user ? { username: user.username, can_moderate: user.can_moderate } : null}
@@ -153,17 +153,17 @@ export default function BrowseScreen() {
           />
         </View>
 
-        {query.isLoading ? (
+        {query.isPending && posts.length === 0 ? (
           <CuriousLoading message="Shelving the repository…" />
-        ) : query.isError ? (
+        ) : query.isError && posts.length === 0 ? (
           <CuriousError onRetry={() => query.refetch()} />
         ) : (
           <FlashList
             data={posts}
             key={`${shelf}-${level}-${debounced}`}
             renderItem={renderItem}
+            keyExtractor={(item) => String(item.id)}
             getItemType={(item) => item.kind}
-            contentContainerStyle={styles.list}
             refreshControl={
               <RefreshControl
                 refreshing={query.isRefetching && !query.isFetchingNextPage}
@@ -176,6 +176,13 @@ export default function BrowseScreen() {
               if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
             }}
             onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              <View style={styles.listEnd}>
+                {query.isFetchingNextPage ? (
+                  <Text style={[styles.footerNote, { color: colors.fadedInk }]}>Loading more…</Text>
+                ) : null}
+              </View>
+            }
             ListEmptyComponent={
               <CuriousEmpty
                 title={debounced ? `No entries match “${debounced}”` : 'This shelf is empty'}
@@ -323,10 +330,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  list: {
+  cell: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  listEnd: { height: 140 },
+  footerNote: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    textAlign: 'center',
+    paddingTop: spacing.md,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   fab: {
     position: 'absolute',
