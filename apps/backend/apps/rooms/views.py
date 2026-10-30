@@ -314,6 +314,9 @@ class RoomMessagesView(generics.ListCreateAPIView):
     """Members-only chat. Join the room first through ``/rooms/<id>/join/``."""
 
     permission_classes = [IsAuthenticated]
+    # The queryset is already the "newest 100, ascending" window both clients
+    # expect; paginating it would hand back the 20 *oldest* of that window.
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.request.method == "POST":

@@ -155,6 +155,23 @@ class PushDeliveryTests(TestCase):
         ]
         self.assertEqual(sizes, [100, 1])
 
+    def test_deliver_expo_needs_an_access_token(self):
+        ExpoPushToken.objects.create(user=self.alice, token="Expo1", platform="android")
+        with override_settings(EXPO_PUSH_ACCESS_TOKEN=""), patch(
+            "apps.push.services.requests.post"
+        ) as post:
+            _deliver_expo([{"id": 1, "token": "Expo1", "platform": "android"}], "t", "b", "/x")
+        post.assert_not_called()
+
+    def test_deliver_expo_targets_the_default_android_channel(self):
+        response = MagicMock()
+        response.json.return_value = {"data": [{"status": "ok", "id": "x"}]}
+        with patch("apps.push.services.requests.post", return_value=response) as post:
+            _deliver_expo([{"id": 1, "token": "Expo1", "platform": "android"}], "t", "b", "/x")
+        message = post.call_args.kwargs["json"]["messages"][0]
+        self.assertEqual(message["channelId"], "default")
+        self.assertEqual(message["sound"], "default")
+
 
 @override_settings(**PUSH_SETTINGS)
 class PushAPIEndpointTests(TestCase):

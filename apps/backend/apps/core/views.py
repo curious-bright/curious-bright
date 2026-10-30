@@ -38,6 +38,31 @@ class LegalVersionsView(APIView):
         return Response(current_versions())
 
 
+def _search_user_row(user, request):
+    """Flat person row for search results.
+
+    Keeps the web page's ``headline`` and adds the fields the mobile member
+    rows render, without paying for the full profile serializer per hit.
+    """
+    profile = getattr(user, "profile", None)
+    bio = (profile.bio or "") if profile else ""
+    expertise = (profile.subject_expertise or "") if profile else ""
+    avatar = (profile.avatar or "") if profile else ""
+    if profile and profile.avatar_file:
+        try:
+            avatar = request.build_absolute_uri(profile.avatar_file.url)
+        except (ValueError, NotImplementedError):
+            pass
+    return {
+        "id": user.id,
+        "username": user.username,
+        "headline": (expertise or bio)[:120],
+        "avatar_url": avatar,
+        "bio": bio,
+        "subject_expertise": expertise,
+    }
+
+
 class SearchView(APIView):
     """Cross-domain keyword search: posts, study rooms and people.
 
@@ -78,15 +103,6 @@ class SearchView(APIView):
             {
                 "posts": PostListSerializer(posts, many=True, context={"request": request}).data,
                 "rooms": RoomSerializer(rooms, many=True, context={"request": request}).data,
-                "users": [
-                    {
-                        "id": u.id,
-                        "username": u.username,
-                        "headline": (u.profile.subject_expertise or u.profile.bio or "")[:120]
-                        if hasattr(u, "profile")
-                        else "",
-                    }
-                    for u in users
-                ],
+                "users": [_search_user_row(u, request) for u in users],
             }
         )

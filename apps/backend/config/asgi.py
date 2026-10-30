@@ -79,10 +79,23 @@ class JWTAuthMiddleware:
         return await self.inner(scope, receive, send)
 
 
+class NativeAwareOriginValidator(OriginValidator):
+    """Channels denies every handshake without an Origin header unless "*" is
+    allowlisted, which rejects React Native sockets — okhttp never sends one.
+    Browsers always send Origin, so browser CSRF protection is unchanged; a
+    header-less connection still has to authenticate through JWTAuthMiddleware.
+    """
+
+    def valid_origin(self, parsed_origin):
+        if parsed_origin is None:
+            return True
+        return super().valid_origin(parsed_origin)
+
+
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": OriginValidator(
+        "websocket": NativeAwareOriginValidator(
             JWTAuthMiddleware(URLRouter(websocket_urlpatterns)),
             getattr(settings, "WS_ALLOWED_ORIGINS", settings.CORS_ALLOWED_ORIGINS),
         ),

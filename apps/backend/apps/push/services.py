@@ -121,6 +121,9 @@ def _origin(endpoint):
 
 def _deliver_expo(tokens, title, body, href):
     access_token = settings.EXPO_PUSH_ACCESS_TOKEN
+    if not access_token:
+        logger.warning("push: EXPO_PUSH_ACCESS_TOKEN unset, skipping %d Expo token(s)", len(tokens))
+        return
     for start in range(0, len(tokens), EXPO_CHUNK_SIZE):
         chunk = tokens[start : start + EXPO_CHUNK_SIZE]
         notifications = [
@@ -129,6 +132,10 @@ def _deliver_expo(tokens, title, body, href):
                 "title": title,
                 "body": (body or "")[:200],
                 "data": {"href": href},
+                "sound": "default",
+                # Android needs an explicit channel to get heads-up display.
+                "channelId": "default",
+                "priority": "high",
             }
             for row in chunk
         ]
@@ -145,6 +152,15 @@ def _deliver_expo(tokens, title, body, href):
             )
             response.raise_for_status()
             results = response.json().get("data", [])
+            for result in results:
+                if isinstance(result, dict) and result.get("status") == "error":
+                    logger.warning("push: expo ticket error: %s", result)
+        except requests.HTTPError as exc:
+            logger.error(
+                "push: expo relay rejected the batch: %s",
+                (getattr(exc.response, "text", "") or "")[:500],
+            )
+            continue
         except Exception:
             logger.exception("push: expo relay request failed")
             continue
