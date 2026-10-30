@@ -23,6 +23,9 @@ export const queryClient = new QueryClient({
 });
 
 const PERSIST_STORAGE_KEY = 'cb.reactQuery';
+// The AuthContext session mirror lives in the same store so one wipe removes
+// every trace of the previous account.
+const ME_STORAGE_KEY = 'cb.me';
 // One AsyncStorage write per burst of cache events instead of one per event:
 // a single feed refresh touches dozens of queries and each write serialises
 // the whole cache.
@@ -143,6 +146,9 @@ export async function clearAuthCache(): Promise<void> {
   stopSubscriptions?.();
   stopSubscriptions = null;
   queryClient.clear();
-  await queryPersister.removeClient();
+  await Promise.all([
+    queryPersister.removeClient(),
+    AsyncStorage.removeItem(ME_STORAGE_KEY),
+  ]);
   watchCache();
 }

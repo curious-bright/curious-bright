@@ -95,7 +95,9 @@ highlighter title reveals, subject accent colors — and caches everything with
   Settings → **Send a test notification** exercises the whole chain without a
   second account; it reports `no_device` if registration failed and
   `push_disabled` if the server has no push credentials.
-- Signing out clears tokens and the entire persisted query cache.
+- Signing out clears tokens, the persisted query cache and the offline session
+  mirror (`cb.me` in AsyncStorage), which is what lets a cold start with no
+  network still open on the cached notebook instead of the login screen.
 
 ## Update safety workflows
 

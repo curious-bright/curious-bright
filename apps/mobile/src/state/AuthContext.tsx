@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ApiError,
@@ -49,10 +50,51 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// A copy of /auth/me/ kept outside the query cache so an offline cold start
+// still knows who is signed in. Tokens stay in SecureStore; the e-mail address
+// here is cleared on wipe by clearAuthCache(), which owns this key too.
+const ME_CACHE_KEY = 'cb.me';
+
+async function rememberMe(me: Me | null): Promise<void> {
+  try {
+    if (me) await AsyncStorage.setItem(ME_CACHE_KEY, JSON.stringify(me));
+    else await AsyncStorage.removeItem(ME_CACHE_KEY);
+  } catch {
+    // Storage hiccups only cost the offline session, never the live one.
+  }
+}
+
+async function storedMe(): Promise<Me | null> {
+  try {
+    const raw = await AsyncStorage.getItem(ME_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as Me) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const lastRefreshRef = useRef(0);
+
+  const applyMe = useCallback((me: Me) => {
+    setUser(me);
+    void rememberMe(me);
+  }, []);
+
+  const userRef = useRef<Me | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const patchMe = useCallback(
+    (mutate: (current: Me) => Me) => {
+      const current = userRef.current;
+      if (current) applyMe(mutate(current));
+    },
+    [applyMe],
+  );
 
   const refreshMe = useCallback(async (force = false) => {
     if (!getAccessToken()) {
@@ -63,28 +105,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!force && Date.now() - lastRefreshRef.current < 15000) return;
     lastRefreshRef.current = Date.now();
     try {
-      setUser(await apiFetchStrict<Me>('/auth/me/'));
+      applyMe(await apiFetchStrict<Me>('/auth/me/'));
     } catch (error) {
-      // Offline still counts as signed in: the cached session and cached
+      // Offline still counts as signed in: the stored session and cached
       // content render, and queued mutations resume on reconnect.
-      if (error instanceof ApiError && error.code === 'network_error') return;
+      if (error instanceof ApiError && error.code === 'network_error') {
+        const cached = await storedMe();
+        if (cached) setUser((current) => current ?? cached);
+        else void rememberMe(null); // no mirror for this token set at all
+        return;
+      }
       clearTokens();
       setUser(null);
+      void rememberMe(null);
       void clearAuthCache();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyMe]);
 
   const startSession = useCallback(async (access: string, refresh: string): Promise<Me> => {
     // Any cache from a previous account must not leak into this session.
     await clearAuthCache();
     setTokens(access, refresh);
     const me = await apiFetchStrict<Me>('/auth/me/');
-    setUser(me);
+    applyMe(me);
     setLoading(false);
     return me;
-  }, []);
+  }, [applyMe]);
 
   useEffect(() => {
     void loadTokens().then(() => refreshMe(true));
@@ -101,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         clearTokens();
         setUser(null);
+        void rememberMe(null);
         throw error;
       }
     },
@@ -114,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         clearTokens();
         setUser(null);
+        void rememberMe(null);
         throw error;
       }
     },
@@ -149,10 +199,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await clearAuthCache();
     setTokens(data.access, data.refresh);
-    setUser(data.user);
+    applyMe(data.user);
     setLoading(false);
     return data.user;
-  }, []);
+  }, [applyMe]);
 
   const resendVerification = useCallback(async (email: string): Promise<boolean> => {
     return apiVoid('/auth/resend-verification/', {
@@ -180,9 +230,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ accept_terms: acceptTerms, accept_privacy: acceptPrivacy }),
     });
-    setUser((current) => (current ? { ...current, consent: data.consent } : current));
+    patchMe((current) => ({ ...current, consent: data.consent }));
     return data.consent;
-  }, []);
+  }, [patchMe]);
 
   const logout = useCallback(async () => {
     const refresh = getRefreshToken();
@@ -191,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     clearTokens();
     setUser(null);
+    void rememberMe(null);
     await clearAuthCache();
   }, []);
 
@@ -212,10 +263,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const updated = await apiFetch<Me>('/auth/me/', { method: 'PATCH', body });
       if (!updated) return false;
-      setUser(updated);
+      applyMe(updated);
       return true;
     },
-    [],
+    [applyMe],
   );
 
   const changePassword = useCallback(
