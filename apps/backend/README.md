@@ -309,6 +309,7 @@ Current suite: **200 tests**. It covers the error contract, visibility, PII-safe
 - For multi-worker realtime, link Redis and set `REDIS_URL`.
 - For video, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
 - For billing, set `PAYSTACK_SECRET_KEY`; point the Paystack webhook at `https://<api-host>/api/billing/webhook/paystack/` and the return URL at `https://org.curiousbright.com.ng/billing/verify`.
+- For web push, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate with `npx web-push generate-vapid-keys`; keep the private half out of chat/logs). For native (Expo/FCM) push, set `EXPO_PUSH_ACCESS_TOKEN`. All are optional — push stays silently disabled without them.
 - Media is served from the container filesystem (even with debug off). Attach a persistent volume at `apps/backend/media` or switch to object storage.
 - Verification documents use a separate private storage root (`PRIVATE_MEDIA_ROOT`). Attach a second persistent private volume; never expose it through the public media proxy/CDN.
 - Set `WS_ALLOWED_ORIGINS` and `ORG_REGISTRATION_ALLOWED_ORIGINS` explicitly in production.
