@@ -72,3 +72,20 @@ highlighter title reveals, subject accent colors — and caches everything with
 - Google sign-in is intentionally not wired yet (needs a registered
   `curiousbright://` redirect URI on the backend first).
 - Signing out clears tokens and the entire persisted query cache.
+
+## Update safety workflows
+
+- `.github/workflows/mobile-ci.yml` runs on every push/PR touching `apps/mobile`
+  (except native folders): `tsc --noEmit`, `expo config` validation,
+  `expo-doctor` (informational) and a Metro `expo export` bundle smoke test.
+- `expo-updates` is installed with `runtimeVersion.policy: "appVersion"` and
+  pinned EAS channels (`development` / `preview` / `production` in `eas.json`).
+  OTA updates only reach builds with a matching runtime version, so a JS-only
+  update can never break a native build that predates it.
+- `.github/workflows/mobile-update.yml` (manual dispatch) re-runs typecheck +
+  bundle, then publishes `eas update --channel <preview|production> --auto`
+  with a staged rollout percentage (default 25%). Requires an `EXPO_TOKEN`
+  repository secret (EAS account access token).
+- When native code, app.json config or SDK versions change: bump
+  `expo.version` (e.g. 1.0.0 → 1.1.0) and ship a new build BEFORE publishing
+  updates to the new channel — old installs keep their current runtime.

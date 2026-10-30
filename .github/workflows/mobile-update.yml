@@ -1,0 +1,71 @@
+name: Mobile OTA Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: EAS Update channel to publish to
+        type: choice
+        options:
+          - preview
+          - production
+        default: preview
+      rollout:
+        description: Staged rollout percentage (5-100)
+        type: string
+        default: "25"
+
+concurrency:
+  group: mobile-update
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify and publish update (${{ inputs.channel }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      ROLLOUT: ${{ inputs.rollout }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Require EXPO_TOKEN secret
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN secret is not configured. Add an EAS account access token to the repository secrets." >&2
+            exit 1
+          fi
+      - name: Validate channel input
+        run: |
+          case "$CHANNEL" in
+            preview|production) ;;
+            *) echo "Unsupported channel: invalid input" >&2; exit 1 ;;
+          esac
+      - name: Validate rollout input
+        run: |
+          if ! echo "$ROLLOUT" | grep -Eq '^(100|[1-9][0-9]?)$'; then
+            echo "rollout must be an integer between 1 and 100" >&2
+            exit 1
+          fi
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Metro bundle smoke test
+        run: pnpm exec expo export --platform android --output-dir /tmp/ci-export
+      - name: Publish update with staged rollout
+        run: |
+          git_commit=$(git rev-parse --short HEAD)
+          pnpm dlx eas-cli@latest update \
+            --channel "$CHANNEL" \
+            --auto \
+            --rollout-percentage "$ROLLOUT" \
+            --message "OTA update $git_commit on $CHANNEL (${ROLLOUT}% rollout)"

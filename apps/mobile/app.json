@@ -4,6 +4,13 @@
     "slug": "curious-bright",
     "scheme": "curiousbright",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8c557c1f-10b6-4b2e-bb01-202136089381",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -50,7 +57,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e26f158c-3a7b-41cd-9133-d0acfbc4bd98"
+        "projectId": "8c557c1f-10b6-4b2e-bb01-202136089381"
       }
     }
   }
