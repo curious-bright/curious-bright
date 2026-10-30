@@ -14,8 +14,10 @@ import { CuriousEmpty, CuriousError, CuriousLoading } from '../ui/CuriousStates'
 import { Field } from '../ui/Field';
 import { HighlighterText } from '../ui/HighlighterText';
 import { NotebookCard } from '../ui/NotebookCard';
+import { NotificationBell } from '../ui/NotificationBell';
 import { showDanger, showSuccess } from '../ui/Toast';
 import { useAuth } from '../../state/AuthContext';
+import { useStartConversation } from '../../hooks/useChat';
 import { useToggleFollow, useToggleLike } from '../../hooks/useFeedActions';
 import { fetchAuthorPosts, fetchIsFollowing, fetchProfile, q } from '../../lib/queries';
 import { subjectColor } from '../../lib/subjects';
@@ -55,6 +57,7 @@ export function ProfileView({ username }: { username: string }) {
 
   const like = useToggleLike();
   const follow = useToggleFollow();
+  const startChat = useStartConversation((id) => router.push(`/chat/${id}`));
 
   const profile = profileQuery.data;
   const following = followingQuery.data ?? false;
@@ -201,22 +204,33 @@ export function ProfileView({ username }: { username: string }) {
                     {!editing ? (
                       <Button small variant="secondary" title="Edit profile" onPress={startEdit} />
                     ) : null}
-                    <Pressable
-                      onPress={() => router.push('/settings')}
-                      hitSlop={6}
-                      style={[styles.gear, { borderColor: colors.line, backgroundColor: colors.paperHover }]}
-                      accessibilityLabel="Settings"
-                    >
-                      <Ionicons name="settings-outline" size={16} color={colors.ink} />
-                    </Pressable>
+                    <View style={styles.iconRow}>
+                      <NotificationBell />
+                      <Pressable
+                        onPress={() => router.push('/settings')}
+                        hitSlop={6}
+                        style={[styles.gear, { borderColor: colors.line, backgroundColor: colors.paperHover }]}
+                        accessibilityLabel="Settings"
+                      >
+                        <Ionicons name="settings-outline" size={16} color={colors.ink} />
+                      </Pressable>
+                    </View>
                   </>
                 ) : user ? (
-                  <Button
-                    small
-                    variant={following ? 'secondary' : 'primary'}
-                    title={following ? 'Following' : 'Follow'}
-                    onPress={toggleFollowNow}
-                  />
+                  <>
+                    <Button
+                      small
+                      variant="primary"
+                      title={startChat.isPending ? 'Opening…' : 'Message'}
+                      onPress={() => startChat.mutate(profile.username)}
+                    />
+                    <Button
+                      small
+                      variant={following ? 'ghost' : 'secondary'}
+                      title={following ? 'Following' : 'Follow'}
+                      onPress={toggleFollowNow}
+                    />
+                  </>
                 ) : null}
               </View>
             </View>
@@ -379,6 +393,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   actionCol: { alignItems: 'flex-end', gap: spacing.sm },
+  iconRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   gear: {
     width: 34,
     height: 34,

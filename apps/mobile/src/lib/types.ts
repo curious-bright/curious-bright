@@ -177,22 +177,74 @@ export interface NotificationItem {
   created_at: string;
 }
 
-export interface ConversationSummary {
+// Mirrors apps/web/src/state/MessagingContext.tsx (backend serializers).
+export interface ChatUser {
   id: number;
-  peer: FeedAuthor;
-  last_message: string | null;
-  last_message_at: string | null;
-  unread_count: number;
+  username: string;
+  profile?: {
+    avatar?: string;
+    avatar_url?: string;
+    subject_expertise?: string;
+  };
 }
 
-export interface DirectMessage {
+export interface ChatMessage {
   id: number;
   conversation: number;
-  sender: FeedAuthor;
+  sender: ChatUser;
   body: string;
+  client_id?: string | null;
   created_at: string;
-  mine: boolean;
-  is_read?: boolean;
+  read_at: string | null;
+  deleted_at: string | null;
+  deleted: boolean;
+  pending?: boolean;
+}
+
+export interface ConversationSummary {
+  id: number;
+  other_user: ChatUser;
+  last_message: ChatMessage | null;
+  unread_count: number;
+  is_blocked: boolean;
+  blocked_by_me: boolean;
+  blocked_by_other: boolean;
+  can_send: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Rooms app serializers (apps/backend/apps/rooms/serializers.py), text-chat
+// surface only — livekit/whiteboard fields are ignored on mobile for now.
+export interface RoomInfo {
+  id: number;
+  name: string;
+  topic: string;
+  description?: string;
+  organization_name?: string | null;
+  created_by?: string | null;
+  member_count: number;
+  is_member?: boolean;
+  mine?: boolean;
+  can_edit?: boolean;
+  livekit_enabled?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface RoomMember {
+  id: number;
+  user: ChatUser;
+  joined_at: string;
+}
+
+export interface RoomMessage {
+  id: number;
+  room: number;
+  sender: ChatUser;
+  content: string;
+  created_at: string;
+  pending?: boolean;
 }
 
 export type ProfilePatch = Partial<{
