@@ -1,198 +1,181 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { apiFetch } from '../src/lib/api';
-import * as SecureStore from 'expo-secure-store';
-import { RegisterSchema } from '@curious-bright/validation';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthShell } from '../src/components/auth/AuthShell';
+import { Button } from '../src/components/ui/Button';
+import { Field } from '../src/components/ui/Field';
+import { ApiError } from '../src/lib/api';
+import { useAuth } from '../src/state/AuthContext';
+import { useTheme } from '../src/theme';
+
+function ConsentRow({
+  checked,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable onPress={onToggle} style={styles.consent} hitSlop={6}>
+      <View
+        style={[
+          styles.checkbox,
+          {
+            borderColor: colors.lineDark,
+            backgroundColor: checked ? colors.ink : 'transparent',
+          },
+        ]}
+      >
+        {checked ? <Ionicons name="checkmark" size={13} color={colors.paper} /> : null}
+      </View>
+      <Text style={[styles.consentText, { color: colors.fadedInk }]}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function RegisterScreen() {
-  const [name, setName] = useState('');
-  const [schoolName, setSchoolName] = useState('');
+  const { register } = useAuth();
+  const { colors } = useTheme();
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const handleRegister = async () => {
-    try {
-      RegisterSchema.parse({ name, schoolName, email, password });
-    } catch (error: any) {
-      Alert.alert('Validation Error', error.errors?.[0]?.message || 'Invalid input');
+  const submit = async () => {
+    if (busy) return;
+    if (!username.trim() || !email.trim() || !password) {
+      setError('Fill in every field before signing the page.');
       return;
     }
-
-    setLoading(true);
+    if (!acceptTerms || !acceptPrivacy) {
+      setError('Accept the terms and privacy policy to continue.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
     try {
-      const data = await apiFetch('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ name, schoolName, email, password }),
-      });
-
-      if (data.token) {
-        await SecureStore.setItemAsync('token', data.token);
-        router.replace('/');
+      await register(username.trim(), email.trim(), password, acceptTerms, acceptPrivacy);
+      router.push({ pathname: '/verify-email', params: { email: email.trim() } });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        router.push({ pathname: '/verify-email', params: { email: email.trim() } });
       } else {
-        Alert.alert('Error', 'No token received');
+        setError(err instanceof ApiError ? err.message : 'Could not create your account.');
       }
-    } catch (error: any) {
-      Alert.alert('Registration Failed', error.message);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
-      
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Name"
-          placeholderTextColor="#777"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="School Name"
-          placeholderTextColor="#777"
-          value={schoolName}
-          onChangeText={setSchoolName}
-          autoCapitalize="words"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#777"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#777"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+    <AuthShell>
+      <Text style={[styles.heading, { color: colors.ink }]}>Join the notebook</Text>
+      <Text style={[styles.sub, { color: colors.fadedInk }]}>
+        Ask questions, share explanations and keep a public record of what you learn.
+      </Text>
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Register</Text>
-          )}
-        </TouchableOpacity>
+      <Field
+        label="Username"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+        autoComplete="username"
+      />
+      <Field
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+      />
+      <Field
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoComplete="new-password"
+        onSubmitEditing={submit}
+        error={error}
+      />
 
-        <TouchableOpacity onPress={() => router.push('/login')} style={styles.linkButton}>
-          <Text style={styles.linkText}>Already have an account? Login</Text>
-        </TouchableOpacity>
+      <ConsentRow
+        checked={acceptTerms}
+        onToggle={() => setAcceptTerms((v) => !v)}
+        label="I accept the Terms of Use"
+      />
+      <ConsentRow
+        checked={acceptPrivacy}
+        onToggle={() => setAcceptPrivacy((v) => !v)}
+        label="I accept the Privacy Policy"
+      />
 
-        {/* Legal consent + navigation */}
-        <Text style={styles.legalNotice}>
-          By registering, you agree to our{' '}
-          <Text style={styles.legalLink} onPress={() => router.push('/terms')}>Terms of Use</Text>
-          {' '}and{' '}
-          <Text style={styles.legalLink} onPress={() => router.push('/privacy')}>Privacy Policy</Text>.
-        </Text>
+      <Button title={busy ? 'Creating…' : 'Create account'} onPress={submit} loading={busy} style={styles.cta} />
 
-        <View style={styles.legalRow}>
-          <TouchableOpacity onPress={() => router.push('/privacy')} style={styles.legalBtn}>
-            <Text style={styles.legalBtnText}>Privacy Policy</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/terms')} style={styles.legalBtn}>
-            <Text style={styles.legalBtnText}>Terms of Use</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.footer}>
+        <Text style={[styles.footerText, { color: colors.fadedInk }]}>Already writing with us? </Text>
+        <Pressable onPress={() => router.replace('/login')} hitSlop={8}>
+          <Text style={[styles.link, { color: colors.teal }]}>Sign in</Text>
+        </Pressable>
       </View>
-    </View>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  heading: {
+    fontFamily: 'ClashDisplay_600',
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  sub: {
+    fontFamily: 'GeneralSans_400',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  consent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 3,
+    borderTopRightRadius: 0,
+    borderWidth: 1.5,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 48,
-    textAlign: 'center',
-  },
-  form: {
-    gap: 16,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    padding: 16,
-    color: '#fff',
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  linkButton: {
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  linkText: {
-    color: '#aaaaaa',
-    fontSize: 14,
-  },
-  legalNotice: {
-    marginTop: 20,
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#888888',
-    lineHeight: 17,
-    fontFamily: 'monospace',
-  },
-  legalLink: {
-    color: '#00A896',
-    textDecorationLine: 'underline',
-  },
-  legalRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  legalBtn: {
+  consentText: {
+    fontFamily: 'GeneralSans_400',
+    fontSize: 13,
     flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 6,
   },
-  legalBtnText: {
-    fontSize: 12,
-    color: '#aaaaaa',
-    fontWeight: '600',
+  cta: {
+    marginTop: 8,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  footerText: {
+    fontFamily: 'GeneralSans_400',
+    fontSize: 13,
+  },
+  link: {
+    fontFamily: 'GeneralSans_600',
+    fontSize: 13,
   },
 });

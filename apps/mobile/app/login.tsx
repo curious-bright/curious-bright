@@ -1,138 +1,140 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { apiFetch } from '../src/lib/api';
-import * as SecureStore from 'expo-secure-store';
-import { LoginSchema } from '@curious-bright/validation';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthShell } from '../src/components/auth/AuthShell';
+import { Button } from '../src/components/ui/Button';
+import { Field } from '../src/components/ui/Field';
+import { ApiError } from '../src/lib/api';
+import { useAuth } from '../src/state/AuthContext';
+import { useTheme } from '../src/theme';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const { login } = useAuth();
+  const { colors } = useTheme();
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
-      return;
-    }
-
+  const submit = async () => {
+    if (!identifier.trim() || !password || busy) return;
+    setBusy(true);
+    setError(null);
     try {
-      LoginSchema.parse({ email, password });
-    } catch (error: any) {
-      Alert.alert('Validation Error', error.errors?.[0]?.message || 'Invalid input');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await apiFetch('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (data.token) {
-        await SecureStore.setItemAsync('token', data.token);
-        router.replace('/');
+      const me = await login(identifier.trim(), password);
+      if (me.must_change_password) router.replace('/change-password');
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        const email = identifier.includes('@') ? identifier.trim() : '';
+        router.push(
+          email ? { pathname: '/verify-email', params: { email } } : '/verify-email',
+        );
       } else {
-        Alert.alert('Error', 'No token received');
+        setError(err instanceof ApiError ? err.message : 'Sign-in failed. Please try again.');
       }
-    } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
-      
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#777"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#777"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+    <AuthShell>
+      <Text style={[styles.heading, { color: colors.ink }]}>Welcome Back</Text>
+      <Text style={[styles.sub, { color: colors.fadedInk }]}>Sign in to teach, learn and collaborate with the community.</Text>
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+      <Field
+        label="Username or Email"
+        value={identifier}
+        onChangeText={setIdentifier}
+        autoCapitalize="none"
+        autoComplete="username"
+        returnKeyType="next"
+      />
+      <Field
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoComplete="password"
+        returnKeyType="go"
+        onSubmitEditing={submit}
+        error={error}
+      />
 
-        <TouchableOpacity onPress={() => router.push('/register')} style={styles.linkButton}>
-          <Text style={styles.linkText}>Don't have an account? Register</Text>
-        </TouchableOpacity>
+      <Button title={busy ? 'Signing in…' : 'Sign In'} onPress={submit} loading={busy} />
+
+      <Pressable
+        onPress={() => router.push('/forgot-password')}
+        hitSlop={8}
+        style={styles.linkRow}
+      >
+        <Text style={[styles.link, { color: colors.teal }]}>Forgot password?</Text>
+      </Pressable>
+
+      <View style={styles.footer}>
+        <Text style={[styles.footerText, { color: colors.fadedInk }]}>New to the notebook? </Text>
+        <Pressable onPress={() => router.push('/register')} hitSlop={8}>
+          <Text style={[styles.link, { color: colors.teal }]}>Create an account</Text>
+        </Pressable>
       </View>
-    </View>
+
+      <View style={styles.legal}>
+        <Pressable hitSlop={8} onPress={() => router.push('/legal/terms')}>
+          <Text style={[styles.legalText, { color: colors.fadedInk }]}>Terms</Text>
+        </Pressable>
+        <Ionicons name="ellipse" size={5} color={colors.fadedInk} />
+        <Pressable hitSlop={8} onPress={() => router.push('/legal/privacy')}>
+          <Text style={[styles.legalText, { color: colors.fadedInk }]}>Privacy</Text>
+        </Pressable>
+      </View>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  heading: {
+    fontFamily: 'ClashDisplay_600',
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  sub: {
+    fontFamily: 'GeneralSans_400',
+    fontSize: 13,
+    lineHeight: 19,
+    opacity: 0.65,
+    marginBottom: 20,
+  },
+  linkRow: {
+    alignSelf: 'center',
+    marginTop: 14,
+  },
+  link: {
+    fontFamily: 'GeneralSans_600',
+    fontSize: 13,
+  },
+  footer: {
+    flexDirection: 'row',
     justifyContent: 'center',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 48,
-    textAlign: 'center',
-  },
-  form: {
-    gap: 16,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    padding: 16,
-    color: '#fff',
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 18,
   },
-  buttonDisabled: {
-    opacity: 0.7,
+  footerText: {
+    fontFamily: 'GeneralSans_400',
+    fontSize: 13,
+    opacity: 0.6,
   },
-  buttonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  linkButton: {
+  legal: {
+    flexDirection: 'row',
+    gap: 8,
     alignItems: 'center',
-    marginTop: 24,
+    justifyContent: 'center',
+    marginTop: 22,
   },
-  linkText: {
-    color: '#aaaaaa',
-    fontSize: 14,
+  legalText: {
+    fontFamily: 'JetBrainsMono_400',
+    fontSize: 11,
+    textDecorationLine: 'underline',
+    opacity: 0.55,
   },
 });
