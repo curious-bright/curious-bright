@@ -6,12 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#121212"
-    },
+    "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -22,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#121212"
+        "backgroundColor": "#F7F6F2"
       },
       "package": "com.diawhiz.curiousbright"
     },
@@ -30,9 +25,27 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withAndroidCleartext",
       "expo-router",
       "expo-secure-store",
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-image",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F6F2"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose an image to use as your profile avatar."
+        }
+      ]
     ],
     "extra": {
       "router": {},
