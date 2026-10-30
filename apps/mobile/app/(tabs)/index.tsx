@@ -9,6 +9,7 @@ import { GridBackground } from '../../src/components/ui/GridBackground';
 import { HighlighterText } from '../../src/components/ui/HighlighterText';
 import { PostCard } from '../../src/components/feed/PostCard';
 import { CuriousEmpty, CuriousError, CuriousLoading } from '../../src/components/ui/CuriousStates';
+import { NotificationBell } from '../../src/components/ui/NotificationBell';
 import { useFeed } from '../../src/hooks/useFeed';
 import { useDeletePost, useFlagPost, useToggleFollow, useToggleLike } from '../../src/hooks/useFeedActions';
 import { spacing, useTheme, fontSize, fonts } from '../../src/theme';
@@ -54,14 +55,17 @@ export default function FeedScreen() {
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <HighlighterText key={tab}>{headerTitle}</HighlighterText>
-            <Pressable
-              hitSlop={8}
-              onPress={() => router.push('/search')}
-              style={[styles.iconBtn, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
-              accessibilityLabel="Search"
-            >
-              <Ionicons name="search" size={18} color={colors.ink} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <NotificationBell />
+              <Pressable
+                hitSlop={8}
+                onPress={() => router.push('/search')}
+                style={[styles.iconBtn, { borderColor: colors.line, backgroundColor: colors.paperCard }]}
+                accessibilityLabel="Search"
+              >
+                <Ionicons name="search" size={18} color={colors.ink} />
+              </Pressable>
+            </View>
           </View>
           <View style={styles.tabRow}>
             {(['discover', 'following'] as Tab[]).map((t) => (
@@ -173,6 +177,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   tabRow: {
     flexDirection: 'row',

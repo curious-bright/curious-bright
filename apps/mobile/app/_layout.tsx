@@ -76,6 +76,9 @@ function Gate() {
           <Stack.Screen name="composer" options={{ presentation: 'modal' }} />
           <Stack.Screen name="search" options={{ presentation: 'modal' }} />
           <Stack.Screen name="submit" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="inbox" />
+          <Stack.Screen name="chat/[id]" />
+          <Stack.Screen name="room/[id]" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="change-password" />
           <Stack.Screen name="profile/[username]" />

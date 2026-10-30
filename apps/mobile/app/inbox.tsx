@@ -5,15 +5,14 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar } from '../../src/components/ui/Avatar';
-import { CuriousEmpty, CuriousError, CuriousLoading } from '../../src/components/ui/CuriousStates';
-import { GridBackground } from '../../src/components/ui/GridBackground';
-import { HighlighterText } from '../../src/components/ui/HighlighterText';
-import { apiVoid } from '../../src/lib/api';
-import { fetchNotifications, q } from '../../src/lib/queries';
-import { fontSize, fonts, radii, spacing, useTheme } from '../../src/theme';
-import type { NotificationItem } from '../../src/lib/types';
+import { ScreenHeader } from '../src/components/layout/ScreenHeader';
+import { Avatar } from '../src/components/ui/Avatar';
+import { CuriousEmpty, CuriousError, CuriousLoading } from '../src/components/ui/CuriousStates';
+import { GridBackground } from '../src/components/ui/GridBackground';
+import { apiVoid } from '../src/lib/api';
+import { fetchNotifications, q } from '../src/lib/queries';
+import { fontSize, fonts, radii, spacing, useTheme } from '../src/theme';
+import type { NotificationItem } from '../src/lib/types';
 
 const VERB_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   like: 'heart',
@@ -43,9 +42,8 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export default function NotificationsScreen() {
+export default function InboxScreen() {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const qc = useQueryClient();
 
   const { data: items = [], isLoading, isError, refetch, isRefetching } = useQuery({
@@ -104,14 +102,13 @@ export default function NotificationsScreen() {
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.paper, paddingTop: insets.top + spacing.md }]}>
+    <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <GridBackground />
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <HighlighterText>
-            {unread > 0 ? `Inbox · ${unread} new` : 'Inbox'}
-          </HighlighterText>
-          {unread > 0 ? (
+      <ScreenHeader
+        eyebrow="Activity"
+        title={unread > 0 ? `Inbox · ${unread} new` : 'Inbox'}
+        right={
+          unread > 0 ? (
             <Pressable
               onPress={() => markAllRead.mutate()}
               style={[styles.markBtn, { borderColor: colors.mustard, backgroundColor: `${colors.mustard}1A` }]}
@@ -120,9 +117,9 @@ export default function NotificationsScreen() {
                 {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
               </Text>
             </Pressable>
-          ) : null}
-        </View>
-      </View>
+          ) : null
+        }
+      />
 
       {isLoading ? (
         <CuriousLoading message="Checking your margin notes…" />
@@ -156,13 +153,6 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
   markBtn: {
     borderWidth: 1.5,
     borderRadius: radii.md,

@@ -11,6 +11,7 @@ import { ScreenEnter } from '../../src/components/layout/ScreenEnter';
 import { CuriousEmpty, CuriousError, CuriousLoading } from '../../src/components/ui/CuriousStates';
 import { GridBackground } from '../../src/components/ui/GridBackground';
 import { HighlighterText } from '../../src/components/ui/HighlighterText';
+import { NotificationBell } from '../../src/components/ui/NotificationBell';
 import { useAuth } from '../../src/state/AuthContext';
 import { useToggleFollow, useToggleLike } from '../../src/hooks/useFeedActions';
 import { fetchBrowsePage, q } from '../../src/lib/queries';
@@ -86,9 +87,12 @@ export default function BrowseScreen() {
       <GridBackground />
       <ScreenEnter>
         <View style={styles.header}>
-          <HighlighterText key={shelf}>
-            {shelf === 'PAPERS' ? 'Shared Papers' : 'Community Notes'}
-          </HighlighterText>
+          <View style={styles.titleRow}>
+            <HighlighterText key={shelf}>
+              {shelf === 'PAPERS' ? 'Shared Papers' : 'Community Notes'}
+            </HighlighterText>
+            <NotificationBell />
+          </View>
           <Text style={[styles.subtitle, { color: colors.fadedInk }]}>
             {shelf === 'PAPERS'
               ? 'Downloadable PDFs the community filed away.'
@@ -250,6 +254,12 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
   },
   subtitle: {

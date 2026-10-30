@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { ColorValue, StyleSheet, View } from 'react-native';
-import { fetchNotifications, q } from '../../src/lib/queries';
+import { fetchMessagesUnread, q } from '../../src/lib/queries';
 import { spacing, useTheme, fonts } from '../../src/theme';
 import { useAuth } from '../../src/state/AuthContext';
 
@@ -28,12 +28,12 @@ export default function TabsLayout() {
   const { colors } = useTheme();
   const { isAuthenticated } = useAuth();
 
-  const { data: unread = 0 } = useQuery({
-    queryKey: q.notifications,
-    queryFn: fetchNotifications,
+  const { data: dmUnread } = useQuery({
+    queryKey: q.messagesUnread,
+    queryFn: fetchMessagesUnread,
     enabled: isAuthenticated,
-    select: (list) => list.filter((n) => !n.is_read).length,
   });
+  const unreadChats = dmUnread?.total ?? 0;
 
   return (
     <Tabs
@@ -73,14 +73,21 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="chat"
         options={{
-          title: 'Inbox',
-          tabBarBadge: unread > 0 ? unread : undefined,
+          title: 'Chat',
+          tabBarBadge: unreadChats > 0 ? (unreadChats > 9 ? '9+' : unreadChats) : undefined,
           tabBarBadgeStyle: { backgroundColor: colors.coral, fontSize: 10, fontFamily: fonts.mono },
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name="notifications-outline" focused={focused} color={color} />
+            <TabIcon name="chatbubbles-outline" focused={focused} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="rooms"
+        options={{
+          title: 'Rooms',
+          tabBarIcon: ({ focused, color }) => <TabIcon name="people-outline" focused={focused} color={color} />,
         }}
       />
       <Tabs.Screen
