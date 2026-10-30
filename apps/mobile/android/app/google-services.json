@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "624046656475",
+    "project_id": "curious-bright",
+    "storage_bucket": "curious-bright.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:624046656475:android:d78aeaa613b9d762f735fe",
+        "android_client_info": {
+          "package_name": "com.diawhiz.curiousbright"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0OVVoYq7cpLz1sID1NhlhbZgdvXyM2m8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
