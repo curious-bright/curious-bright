@@ -1,0 +1,51 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - "apps/mobile/**"
+      - "!apps/mobile/android/**"
+      - "!apps/mobile/ios/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-ci.yml"
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "!apps/mobile/android/**"
+      - "!apps/mobile/ios/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck + bundle smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Validate app config
+        run: pnpm exec expo config --type public
+      - name: Dependency sanity (informational)
+        run: pnpm exec expo-doctor
+        continue-on-error: true
+      - name: Metro bundle smoke test
+        run: pnpm exec expo export --platform android --output-dir /tmp/ci-export
