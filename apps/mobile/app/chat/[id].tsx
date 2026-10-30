@@ -224,6 +224,8 @@ export default function ConversationThreadScreen() {
         ),
       );
       setAction(null);
+      // The sidebar preview and unread pill both come from the summary row.
+      qc.invalidateQueries({ queryKey: q.conversations });
     },
   });
 

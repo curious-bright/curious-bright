@@ -15,6 +15,23 @@ import { queryClient } from '../../lib/queryClient';
 import { useRealtime } from '../../lib/realtime';
 import { useAuth } from '../../state/AuthContext';
 
+/** A dropped socket misses every event published while it was down. */
+function useReconnectCatchUp(connected: boolean, keys: readonly (readonly unknown[])[]) {
+  const dropped = React.useRef(false);
+  React.useEffect(() => {
+    if (!connected) {
+      dropped.current = true;
+      return;
+    }
+    if (!dropped.current) return;
+    dropped.current = false;
+    for (const key of keys) queryClient.invalidateQueries({ queryKey: key });
+  }, [connected, keys]);
+}
+
+const ACTIVITY_KEYS = [q.notifications] as const;
+const CHAT_KEYS = [q.conversations, q.messagesUnread] as const;
+
 export function RealtimeBridge() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
@@ -28,18 +45,21 @@ export function RealtimeBridge() {
     else void unregisterPushToken();
   }, [isAuthenticated]);
 
-  useRealtime(isAuthenticated ? '/ws/notifications/' : null, ({ event }) => {
+  const activity = useRealtime(isAuthenticated ? '/ws/notifications/' : null, ({ event }) => {
     if (event === 'notification.created' || event === 'notifications.read') {
       queryClient.invalidateQueries({ queryKey: q.notifications });
     }
   });
 
-  useRealtime(isAuthenticated ? '/ws/messages/' : null, ({ event }) => {
+  const chat = useRealtime(isAuthenticated ? '/ws/messages/' : null, ({ event }) => {
     if (event === 'message.created' || event === 'message.read' || event === 'message.deleted' || event === 'conversation.unread') {
       queryClient.invalidateQueries({ queryKey: q.conversations });
       queryClient.invalidateQueries({ queryKey: q.messagesUnread });
     }
   });
+
+  useReconnectCatchUp(activity.connected, ACTIVITY_KEYS);
+  useReconnectCatchUp(chat.connected, CHAT_KEYS);
 
   return null;
 }

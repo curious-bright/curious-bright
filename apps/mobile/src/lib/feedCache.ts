@@ -64,6 +64,48 @@ export function removeAuthorPosts(qc: QueryClient, username: string): () => void
   return () => undone.forEach((u) => u());
 }
 
+/** Fields a list card shows that the detail screen can change (comment,
+ * solve, accept, like). Copied across without the comment tree, which would
+ * bloat every cached row. */
+const MIRRORED_FIELDS = [
+  'title',
+  'body',
+  'subject',
+  'kind',
+  'academic_level',
+  'visibility',
+  'review_status',
+  'is_solved',
+  'like_count',
+  'comment_count',
+  'liked_by_me',
+  'attachment_url',
+  'attachment_name',
+  'equations',
+  'is_edited',
+  'edited_at',
+  'updated_at',
+] as const;
+
+export function mirrorPostInLists(qc: QueryClient, post: FeedPost): void {
+  const fresh = post as unknown as Record<string, unknown>;
+  walkFeedCaches(qc, (posts) =>
+    posts.map((row) => {
+      if (row.id !== post.id) return row;
+      let changed = false;
+      const next = { ...row };
+      for (const field of MIRRORED_FIELDS) {
+        const value = fresh[field];
+        if (value !== undefined && value !== row[field]) {
+          (next as Record<string, unknown>)[field] = value;
+          changed = true;
+        }
+      }
+      return changed ? next : row;
+    }),
+  );
+}
+
 export function belongsInTab(post: FeedPost, tab: 'discover' | 'following', meUsername?: string): boolean {
   const published = !post.review_status || post.review_status === 'published';
   if (!published) return false;

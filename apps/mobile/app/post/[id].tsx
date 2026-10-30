@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -29,6 +29,7 @@ import { useAuth } from '../../src/state/AuthContext';
 import { useDeletePost, useToggleFollow, useToggleLike } from '../../src/hooks/useFeedActions';
 import { apiFetchStrict } from '../../src/lib/api';
 import { fetchPost, q } from '../../src/lib/queries';
+import { mirrorPostInLists } from '../../src/lib/feedCache';
 import { useRealtime } from '../../src/lib/realtime';
 import { subjectColor } from '../../src/lib/subjects';
 import { fontSize, fonts, radii, spacing, useTheme } from '../../src/theme';
@@ -65,6 +66,11 @@ export default function PostDetailScreen() {
   });
 
   const post = query.data;
+
+  useEffect(() => {
+    if (post) mirrorPostInLists(qc, post);
+  }, [post, qc]);
+
   const isMine = !!post && (post.mine ?? user?.username === post.author.username);
   const canModerate = !!user?.can_moderate;
   const canDelete = !!post && (post.can_delete ?? (isMine || canModerate));

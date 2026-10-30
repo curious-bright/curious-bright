@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ApiError,
   apiFetch,
   apiFetchStrict,
   apiVoid,
@@ -61,50 +62,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     if (!force && Date.now() - lastRefreshRef.current < 15000) return;
     lastRefreshRef.current = Date.now();
-    const data = await apiFetch<Me>('/auth/me/');
-    if (data) {
-      setUser(data);
-    } else {
+    try {
+      setUser(await apiFetchStrict<Me>('/auth/me/'));
+    } catch (error) {
+      // Offline still counts as signed in: the cached session and cached
+      // content render, and queued mutations resume on reconnect.
+      if (error instanceof ApiError && error.code === 'network_error') return;
+      clearTokens();
       setUser(null);
+      void clearAuthCache();
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  const startSession = useCallback(async (access: string, refresh: string): Promise<Me> => {
+    // Any cache from a previous account must not leak into this session.
+    await clearAuthCache();
+    setTokens(access, refresh);
+    const me = await apiFetchStrict<Me>('/auth/me/');
+    setUser(me);
     setLoading(false);
+    return me;
   }, []);
 
   useEffect(() => {
     void loadTokens().then(() => refreshMe(true));
   }, [refreshMe]);
 
-  const login = useCallback(async (identifier: string, password: string): Promise<Me> => {
-    try {
-      const data = await apiFetchStrict<{ access: string; refresh: string }>('/auth/token/', {
-        method: 'POST',
-        body: JSON.stringify({ username: identifier, password }),
-      });
-      setTokens(data.access, data.refresh);
-      const me = await apiFetchStrict<Me>('/auth/me/');
-      setUser(me);
-      setLoading(false);
-      return me;
-    } catch (error) {
-      clearTokens();
-      setUser(null);
-      throw error;
-    }
-  }, []);
+  const login = useCallback(
+    async (identifier: string, password: string): Promise<Me> => {
+      try {
+        const data = await apiFetchStrict<{ access: string; refresh: string }>('/auth/token/', {
+          method: 'POST',
+          body: JSON.stringify({ username: identifier, password }),
+        });
+        return await startSession(data.access, data.refresh);
+      } catch (error) {
+        clearTokens();
+        setUser(null);
+        throw error;
+      }
+    },
+    [startSession],
+  );
 
-  const setGoogleSession = useCallback(async (payload: GoogleAuthPayload): Promise<Me> => {
-    try {
-      setTokens(payload.access, payload.refresh);
-      const me = await apiFetchStrict<Me>('/auth/me/');
-      setUser(me);
-      setLoading(false);
-      return me;
-    } catch (error) {
-      clearTokens();
-      setUser(null);
-      throw error;
-    }
-  }, []);
+  const setGoogleSession = useCallback(
+    async (payload: GoogleAuthPayload): Promise<Me> => {
+      try {
+        return await startSession(payload.access, payload.refresh);
+      } catch (error) {
+        clearTokens();
+        setUser(null);
+        throw error;
+      }
+    },
+    [startSession],
+  );
 
   const register = useCallback(
     async (
@@ -133,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, code }),
     });
+    await clearAuthCache();
     setTokens(data.access, data.refresh);
     setUser(data.user);
     setLoading(false);

@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { RealtimeBridge } from '../src/components/layout/RealtimeBridge';
 import { ToastProvider } from '../src/components/ui/Toast';
@@ -15,7 +15,21 @@ import { ThemeProvider, darkPalette, lightPalette, useTheme } from '../src/theme
 
 SplashScreen.preventAutoHideAsync();
 
-startQueryPersistence();
+/** True once the stored query cache is back in memory, so the first render
+ * shows cached content instead of an empty screen flash. */
+function useCacheRestored(): boolean {
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void startQueryPersistence().then(() => {
+      if (alive) setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return restored;
+}
 
 function useAppFonts(): boolean {
   const [loaded] = useFonts({
@@ -89,14 +103,22 @@ function Gate() {
   );
 }
 
+/** Paints the paper background while the stored cache is being restored. */
+function BootPlaceholder() {
+  const { scheme } = useTheme();
+  const palette = scheme === 'dark' ? darkPalette : lightPalette;
+  return <View style={{ flex: 1, backgroundColor: palette.paper }} />;
+}
+
 export default function RootLayout() {
+  const cacheReady = useCacheRestored();
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ToastProvider>
             <RealtimeBridge />
-            <Gate />
+            {cacheReady ? <Gate /> : <BootPlaceholder />}
           </ToastProvider>
         </AuthProvider>
       </QueryClientProvider>
