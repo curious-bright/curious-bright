@@ -20,6 +20,7 @@
       "bundleIdentifier": "com.diawhiz.curiousbright"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F7F6F2"
@@ -37,6 +38,13 @@
       "expo-image",
       "expo-font",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#F4B43D"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
@@ -50,7 +58,8 @@
         {
           "photosPermission": "Choose an image to use as your profile avatar."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},

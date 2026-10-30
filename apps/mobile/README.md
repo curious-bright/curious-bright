@@ -26,6 +26,10 @@ highlighter title reveals, subject accent colors — and caches everything with
    Without `.env`, dev builds fall back to the Expo host IP, then
    `http://10.0.2.2:8000` on Android emulators and `127.0.0.1` elsewhere.
 
+   Google sign-in: set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and register
+   `curiousbright://auth/google` as an **authorized redirect URI** on that
+   OAuth client. The button hides itself while the env var is empty.
+
 3. **Install & build** — Reanimated 4 worklets require a **dev client** (not Expo Go):
 
    ```
@@ -52,9 +56,10 @@ highlighter title reveals, subject accent colors — and caches everything with
 
 ## Layout
 
-- `app/` — routes: auth screens, `(tabs)` shell (Feed / Browse / Inbox / You),
-  `post/[id]`, `profile/[username]`, `composer`, `search`, `submit`, `settings`,
-  `legal/*`. `app/_layout.tsx` owns fonts, theme, query and auth providers.
+- `app/` — routes: auth screens, `(tabs)` shell (Feed / Browse / Chat / Rooms /
+  You), `chat/[id]`, `room/[id]`, `inbox`, `post/[id]`, `profile/[username]`,
+  `composer`, `search`, `submit`, `settings`, `legal/*`. `app/_layout.tsx` owns
+  fonts, theme, query and auth providers.
 - `src/components/ui/` — design-system primitives (`NotebookCard`, `HighlighterText`,
   `GridBackground`, chips, fields, states, undo-capable Toast).
 - `src/hooks/` + `src/lib/feedCache.ts` — optimistic mutations expressed as
@@ -69,8 +74,17 @@ highlighter title reveals, subject accent colors — and caches everything with
 - Android debug builds allow cleartext HTTP to the LAN backend; release builds
   get `usesCleartextTraffic` via `plugins/withAndroidCleartext.js` (set the API
   URL to HTTPS for production instead when possible).
-- Google sign-in is intentionally not wired yet (needs a registered
-  `curiousbright://` redirect URI on the backend first).
+- Google sign-in uses authorization-code + PKCE (`src/lib/googleAuth.ts`,
+  expo-auth-session `AuthRequest`); the code is exchanged by
+  `POST /api/auth/google/` on the backend.
+- Push notifications (`src/lib/nativePush.ts`): on sign-in the app requests
+  notification permission and registers the Expo push token via
+  `POST /api/push/expo-tokens/`; sign-out deletes it. Android FCM is wired
+  through `google-services.json` (`android.googleServicesFile` + the
+  `expo-notifications` plugin with `assets/notification-icon.png`). Requires a
+  dev-client rebuild after these native changes. For release builds, upload the
+  FCM server key with `eas credentials`. Tapping a notification maps backend
+  hrefs to routes (`/messages/<id>` → `/chat/<id>`, `/notifications` → `/inbox`).
 - Signing out clears tokens and the entire persisted query cache.
 
 ## Update safety workflows
