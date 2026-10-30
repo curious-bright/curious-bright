@@ -3,6 +3,7 @@ import { useNotifications, type Notification } from '../state/NotificationContex
 import { useAuth } from '../state/AuthContext';
 import { CuriousLoading, CuriousEmpty } from '../components/CuriousStates';
 import { HighlighterText } from '../components/HighlighterText';
+import { enablePushNotifications, pushSupported } from '../lib/push';
 
 const VERB_ICONS: Record<string, string> = {
   like: 'bx-heart',
@@ -42,6 +43,11 @@ export default function Notifications() {
         {unreadCount > 0 && (
           <button className="btn btn-secondary" style={{ padding: '0.35rem 0.8rem', fontSize: '0.75rem' }} onClick={() => void markAllRead()}>
             Mark all read
+          </button>
+        )}
+        {pushSupported() && Notification.permission === 'default' && (
+          <button className="btn btn-secondary" style={{ padding: '0.35rem 0.8rem', fontSize: '0.75rem' }} onClick={() => void enablePushNotifications()}>
+            <i className="bx bx-bell" style={{ marginRight: '0.35rem' }}></i>Enable desktop alerts
           </button>
         )}
       </div>

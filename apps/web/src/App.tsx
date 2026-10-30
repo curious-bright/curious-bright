@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from './state/AuthContext';
 import { FeedProvider } from './state/FeedContext';
 import { NotificationProvider, useNotifications } from './state/NotificationContext';
 import { MessagingProvider } from './state/MessagingContext';
+import { attachPushClientListeners, ensurePushSubscription } from './lib/push';
 import { ThemeProvider, useTheme } from './state/ThemeContext';
 import websiteLogo from './assets/website-logo.svg';
 import websiteLogoDark from './assets/website-logo-dark.svg';
@@ -99,6 +100,21 @@ function PricingRedirect() {
 function AppShell() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const { load: loadNotifications } = useNotifications();
+  useEffect(() => {
+    attachPushClientListeners();
+  }, []);
+  useEffect(() => {
+    if (isAuthenticated) void ensurePushSubscription();
+  }, [isAuthenticated]);
+  useEffect(() => {
+    // A push landing while a tab is open refreshes the activity list even if
+    // the notification itself was dismissed.
+    const onPush = () => void loadNotifications();
+    window.addEventListener('curious:push', onPush);
+    return () => window.removeEventListener('curious:push', onPush);
+  }, [loadNotifications]);
   const showRail =
     ['/feed', '/search', '/browse', '/research', '/community', '/notifications'].includes(location.pathname) ||
     location.pathname.startsWith('/profile/');

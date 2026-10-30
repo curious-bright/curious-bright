@@ -42,13 +42,41 @@ Behavior:
   cache.
 - On activation, deletes caches not matching `VERSION`.
 
-`VERSION` is currently `curious-bright-v1`. Change it whenever the shell,
-routing fallback or cache policy changes; otherwise installed clients may keep
-an old shell indefinitely.
+`VERSION` is currently `curious-bright-v2` (bumped when push listeners were
+added). Change it whenever the shell, routing fallback or cache policy changes;
+otherwise installed clients may keep an old shell indefinitely.
 
 Expected offline behavior: the shell and previously cached static assets load,
 but API-backed pages show normal network errors. Offline write queuing is not
 implemented. Do not claim full offline messaging/feed support.
+
+## 2a. Web Push
+
+`sw.js` also handles `push`, `notificationclick` and `pushsubscriptionchange`:
+
+- The server sends `{title, body, href}` JSON; the worker shows a
+  notification with the app icon/badge and stores `href` on the notification.
+- A tap focuses an open app window and posts `{type:'navigate', href}` (the
+  window performs the navigation itself, so React Router keeps state), or
+  opens a new window at `href` when none exists.
+- `pushsubscriptionchange` asks any open window to re-subscribe.
+
+Client side (`apps/web/src/lib/push.ts`):
+
+- Subscriptions are only created after the user grants `Notification`
+  permission and holds a session token. The opt-in button lives on the
+  Notifications page; returning granted-permission users are re-subscribed
+  silently on login (`ensurePushSubscription`).
+- The browser subscription (`endpoint`, `p256dh`, `auth`) is stored
+  server-side against the VAPID public key from `GET /api/push/vapid-public-key/`.
+- `disablePushNotifications()` unsubscribes and deletes the server row.
+
+Backend: see `apps/backend/apps/push` (Web Push via `pywebpush`, VAPID keys in
+`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`). Delivery is best-effort on background
+threads; 404/410 responses prune the stored subscription. Generate keys with
+`npx web-push generate-vapid-keys` and set them in the API environment.
+Expired/expired-pruning caveat: iOS only delivers push to the **installed**
+PWA (iOS 16.4+); desktop and Android Chrome work in normal tabs.
 
 ## 3. Responsive and dark UI
 
@@ -109,6 +137,10 @@ localhost.
 - [ ] Installed window opens standalone at `/feed` and keeps navigation inside
       the app.
 - [ ] Service worker is activated; reload and navigate offline; the shell loads.
+- [ ] After opting in, a DM from another account raises a notification while the
+      tab is closed; tapping it opens `/messages/<id>`.
+- [ ] Re-opening the app does not create a second
+  `WebPushSubscription` row for the same endpoint.
 - [ ] Private API responses are not present in Cache Storage.
 - [ ] `/api/`, `/ws/` and admin requests are not intercepted/cached.
 - [ ] Mobile: top bar + bottom tabs + compose do not overlap safe areas.
