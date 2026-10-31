@@ -48,6 +48,13 @@ private_media/
 cookies.txt
 /.txt
 
+# Google/Firebase service account keys (the FCM V1 push credential). The
+# private key inside is what lets anyone send push to our Android users.
+# google-services.json is the public counterpart and stays tracked.
+*firebase-adminsdk*.json
+service-account*.json
+*-service-account*.json
+
 
 # Qoder CLI session data
 .qoder/
